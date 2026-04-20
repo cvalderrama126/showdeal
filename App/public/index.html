@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>ShowDeal • Login</title>
+  <link href="assets/css/boostrap.min.css" rel="stylesheet">
+  <!--<link href="assets/css/all.min.css" rel="stylesheet">-->
+  <link href="assets/css/showdeal.css" rel="stylesheet">
+  
+</head>
+<body>
+  <div class="sd-topbar py-3">
+    <div class="container d-flex justify-content-between align-items-center">
+      <div class="sd-brand-badge">
+        <span class="sd-dot"></span>
+        <span>ShowDeal</span>
+        <span class="badge badge-sd ms-2">Mobilize Finacial Services</span>
+      </div>
+      <div class="d-flex align-items-center gap-3">
+      </div>
+    </div>
+  </div>
+
+  <div class="container my-4">
+    <div class="position-fixed top-0 end-0 p-3" style="z-index: 1080;">
+      <div id="sdToasts" class="toast-container"></div>
+    </div>
+
+    <div class="row">
+      
+      <div class="col-12">
+        
+<div class="row justify-content-center">
+  <div class="col-md-7 col-lg-5">
+    <div class="sd-card p-4 p-md-5">
+      <div class="mb-3">
+        <div class="h3 mb-1 sd-section-title">Iniciar sesión</div>
+        <div class="sd-muted">Acceso para empresas participantes y administradores de ShowDeal.</div>
+      </div>
+      <form id="loginForm" novalidate>
+        <div class="mb-3">
+          <label class="form-label">Correo / Usuario</label>
+          <input type="text" class="form-control" id="user" placeholder="usuario o correo" required>
+          <div class="invalid-feedback">Ingresa tu usuario o correo.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Contraseña</label>
+          <input type="password" class="form-control" id="password" placeholder="••••••••" required minlength="6">
+          <div class="invalid-feedback">La contraseña es obligatoria (mín. 6).</div>
+        </div>
+        <div class="d-grid gap-2">
+          <button class="btn btn-sd btn-lg" type="submit"><i class="fa-solid fa-right-to-bracket me-2"></i>Continuar</button>
+          <a class="btn btn-sd-outline" href="#" data-bs-toggle="tooltip" title="Mock: en producción habría recuperación segura.">
+            ¿Olvidaste tu contraseña?
+          </a>
+        </div>
+      </form>
+      <div class="sd-divider my-4"></div>
+      <div class="small sd-muted">
+        <b>Nota:</b> Los vehículos subastados pueden provenir de captura jurídica por impago o dación en pago. 
+        El proceso se rige por condiciones de cada subasta (unidad o lote, oferta única o puja en línea).
+      </div>
+    </div>
+  </div>
+</div>
+
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/js/jquery.min.js"></script>
+  <script src="assets/js/boostrap.bundle.min.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/auth-client.js"></script>
+</body>
+</html>

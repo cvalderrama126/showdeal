@@ -1,0 +1,171 @@
+version: '3.9'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: showdeal-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-showdeal}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-showdeal_dev_password}
+      POSTGRES_DB: ${DB_NAME:-showdeal}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      # Minimal logging for production
+      POSTGRES_INITDB_ARGS: "-c log_statement=none"
+    
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    
+    volumes:
+      # Persistencia de datos
+      - postgres_data:/var/lib/postgresql/data
+      # Script de inicialización (schema + seed)
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+    
+    networks:
+      - showdeal-network
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-showdeal} -d ${DB_NAME:-showdeal}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    # Limitar recursos
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # Redis Cache (opcional)
+  redis:
+    image: redis:7-alpine
+    container_name: showdeal-redis
+    restart: unless-stopped
+    
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    
+    volumes:
+      - redis_data:/data
+    
+    networks:
+      - showdeal-network
+    
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+  # Node.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Cache layers para desarrollo más rápido
+      cache_from:
+        - showdeal:latest
+    
+    image: showdeal:latest
+    container_name: showdeal-api
+    restart: unless-stopped
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    
+    environment:
+      # Application
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 3000
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      
+      # Database (debe coincidir con postgres service)
+      DATABASE_URL: postgresql://${DB_USER:-showdeal}:${DB_PASSWORD:-showdeal_dev_password}@postgres:5432/${DB_NAME:-showdeal}?schema=showdeal
+      
+      # JWT
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production-min-32-chars}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      JWT_CHALLENGE_SECRET: ${JWT_CHALLENGE_SECRET:-dev-challenge-secret-min-32-chars}
+      JWT_CHALLENGE_EXPIRES_IN: ${JWT_CHALLENGE_EXPIRES_IN:-5m}
+      
+      # File Upload
+      UPLOAD_DIR: ./uploads
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-10485760}
+      
+      # Redis (opcional)
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379
+      
+      # Optional: Monitoring
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # SENTRY_DSN: ${SENTRY_DSN:-}
+    
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    
+    volumes:
+      # Live reload en desarrollo
+      - ./src:/app/src:delegated
+      - ./public:/app/public:delegated
+      - ./prisma:/app/prisma:delegated
+      # Uploads persistentes
+      - app_uploads:/app/uploads
+      # Node modules para evitar conflicts
+      - /app/node_modules
+    
+    networks:
+      - showdeal-network
+    
+    healthcheck:
+      test: ["CMD", "node", "/app/healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 512M
+
+# Named volumes para persistencia
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  app_uploads:
+    driver: local
+
+# Network aislada
+networks:
+  showdeal-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
