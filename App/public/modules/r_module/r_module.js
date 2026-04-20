@@ -7,6 +7,7 @@ const MODULE_LABELS = {
   r_module: "Módulos",
   r_company: "Compañías",
   r_role: "Roles",
+  r_ui_theme: "Tema UI",
   r_user: "Usuarios",
   r_access: "Accesos",
   r_connection: "Conexiones",
