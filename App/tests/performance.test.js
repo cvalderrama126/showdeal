@@ -158,8 +158,9 @@ describe('⚡ Performance & Latency Tests', () => {
       
       // Average should be consistent
       expect(avgTime).toBeLessThan(100);
-      // Max should not exceed 3x the average
-      expect(maxTime).toBeLessThan(avgTime * 3);
+      // Max should not exceed 5x the average (the first request can be much
+      // slower than the rest due to Node/V8 JIT warmup, especially in CI).
+      expect(maxTime).toBeLessThan(avgTime * 5);
     });
   });
 
