@@ -1,0 +1,194 @@
+config:
+  target: "{{ $processEnvironment.API_URL || 'http://localhost:3000' }}"
+  phases:
+    # Phase 1: Warm-up (ramp up gradually)
+    - duration: 30
+      arrivalRate: 10
+      name: "Warm-up phase"
+    # Phase 2: Load test (sustained load)
+    - duration: 60
+      arrivalRate: 50
+      name: "Sustained load"
+    # Phase 3: Spike (sudden surge)
+    - duration: 30
+      arrivalRate: 100
+      name: "Spike test"
+    # Phase 4: Cool-down (ramp down)
+    - duration: 30
+      arrivalRate: 20
+      name: "Cool-down phase"
+  
+  # Set high timeout for slow responses
+  timeout: 30
+  
+  # Connection keep-alive
+  http:
+    timeout: 30
+    keepAlive: true
+    
+  # Report settings
+  processor: "./artillery-processor.js"
+  variables:
+    token: "Bearer test-token"
+    userId: 1
+    
+  # Enable detailed reporting
+  reporting:
+    - type: "json"
+      filename: "./artillery-report-{{ timestamp }}.json"
+
+scenarios:
+  # Scenario 1: Typical User Journey
+  - name: "Typical User Operations"
+    flow:
+      - get:
+          url: "/health"
+          expect:
+            - statusCode: 200
+      - post:
+          url: "/auth/login"
+          json:
+            email: "test@example.com"
+            password: "Password123!"
+          expect:
+            - statusCode: [200, 401]
+      - get:
+          url: "/api/r_user"
+          headers:
+            Authorization: "{{ token }}"
+          expect:
+            - statusCode: [200, 401]
+      - get:
+          url: "/api/r_module"
+          headers:
+            Authorization: "{{ token }}"
+          expect:
+            - statusCode: [200, 401]
+
+  # Scenario 2: API Read-Heavy Operations
+  - name: "Read-Heavy Operations"
+    flow:
+      - get:
+          url: "/api/r_user"
+          headers:
+            Authorization: "{{ token }}"
+      - get:
+          url: "/api/r_company"
+          headers:
+            Authorization: "{{ token }}"
+      - get:
+          url: "/api/r_asset"
+          headers:
+            Authorization: "{{ token }}"
+      - get:
+          url: "/api/r_auction"
+          headers:
+            Authorization: "{{ token }}"
+      - get:
+          url: "/api/r_bid"
+          headers:
+            Authorization: "{{ token }}"
+
+  # Scenario 3: API Write Operations
+  - name: "Write Operations"
+    flow:
+      - post:
+          url: "/api/r_user"
+          headers:
+            Authorization: "{{ token }}"
+          json:
+            email: "user{{ $timestamp }}@test.com"
+            password: "Password123!"
+          expect:
+            - statusCode: [201, 400, 401]
+      - post:
+          url: "/api/r_company"
+          headers:
+            Authorization: "{{ token }}"
+          json:
+            name: "Company {{ $timestamp }}"
+          expect:
+            - statusCode: [201, 400, 401]
+
+  # Scenario 4: Mixed Operations
+  - name: "Mixed Operations"
+    flow:
+      - get:
+          url: "/api/r_user?skip=0&take=10"
+          headers:
+            Authorization: "{{ token }}"
+      - post:
+          url: "/api/r_bid"
+          headers:
+            Authorization: "{{ token }}"
+          json:
+            amount: 100
+            auctionId: 1
+      - get:
+          url: "/api/r_auction"
+          headers:
+            Authorization: "{{ token }}"
+      - put:
+          url: "/api/r_user/{{ userId }}"
+          headers:
+            Authorization: "{{ token }}"
+          json:
+            email: "updated@test.com"
+      - get:
+          url: "/api/r_user/{{ userId }}"
+          headers:
+            Authorization: "{{ token }}"
+
+  # Scenario 5: Heavy Load on Single Endpoint
+  - name: "Single Endpoint Stress"
+    flow:
+      - loop:
+          - get:
+              url: "/api/r_module?skip={{ $loopCount }}&take=10"
+              headers:
+                Authorization: "{{ token }}"
+        count: 5
+
+  # Scenario 6: Search Operations
+  - name: "Search Operations"
+    flow:
+      - get:
+          url: "/api/r_user?search=john"
+          headers:
+            Authorization: "{{ token }}"
+      - get:
+          url: "/api/r_company?search=tech"
+          headers:
+            Authorization: "{{ token }}"
+      - get:
+          url: "/api/r_asset?search=prop"
+          headers:
+            Authorization: "{{ token }}"
+
+  # Scenario 7: Authentication Flow
+  - name: "Authentication Stress"
+    flow:
+      - post:
+          url: "/auth/register"
+          json:
+            email: "user{{ $timestamp }}@test.com"
+            password: "Password123!"
+      - post:
+          url: "/auth/login"
+          json:
+            email: "user{{ $timestamp }}@test.com"
+            password: "Password123!"
+      - get:
+          url: "/auth/me"
+          headers:
+            Authorization: "{{ token }}"
+
+  # Scenario 8: Rate Limiting Test
+  - name: "Rate Limit Test"
+    flow:
+      - loop:
+          - get:
+              url: "/api/r_user"
+              headers:
+                Authorization: "{{ token }}"
+        count: 30
