@@ -79,12 +79,8 @@ function actorFromReq(req) {
 
 function contextFromReq(req) {
   if (!req) return {};
-  // Trust-proxy aware extraction; fallback to socket address.
-  const ip =
-    (req.headers && (req.headers["x-forwarded-for"] || "").split(",")[0].trim()) ||
-    req.ip ||
-    req.connection?.remoteAddress ||
-    null;
+  // req.ip is trust-proxy aware when app.set("trust proxy", ...) is configured.
+  const ip = req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || null;
   const ua = req.headers ? req.headers["user-agent"] || null : null;
   return {
     ip: ip || null,

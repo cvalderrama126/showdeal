@@ -13,7 +13,6 @@
 
   function saveSession(payload) {
     const session = {
-      token: payload.token,
       user: payload.user || null,
       firstLogin: payload.firstLogin === true,
       otpSetup: payload.otpSetup || null,
@@ -56,7 +55,7 @@
 
   function redirectIfAuthenticated() {
     const session = getSession();
-    if (!session?.token) return;
+    if (!session?.user) return;
 
     const path = window.location.pathname;
     if (path === "/" || path.endsWith("/index.html") || path.endsWith("/otp.html")) {
@@ -68,6 +67,7 @@
     const resp = await fetch(API_BASE + url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(body || {}),
     });
 
@@ -112,7 +112,7 @@
         return;
       }
 
-      if (response.data.token) {
+      if (response.data.ok) {
         saveSession(response.data);
         clearChallenge();
         window.location.href = "/home.html?first_login=" + (response.data.firstLogin === true ? "1" : "0");
@@ -157,11 +157,6 @@
         return;
       }
 
-      if (!response.data.token) {
-        showError("La verificacion OTP no devolvio sesion.");
-        return;
-      }
-
       saveSession(response.data);
       clearChallenge();
       window.location.href = "/home.html?first_login=" + (response.data.firstLogin === true ? "1" : "0");
@@ -173,9 +168,13 @@
   }
 
   window.sdLogout = function (redirectTo = "/index.html") {
-    clearSession();
-    clearChallenge();
-    window.location.replace(redirectTo);
+    fetch(API_BASE + "/auth/logout", { method: "POST", credentials: "include" })
+      .catch(() => {})
+      .finally(() => {
+        clearSession();
+        clearChallenge();
+        window.location.replace(redirectTo);
+      });
   };
 
   document.addEventListener("DOMContentLoaded", () => {

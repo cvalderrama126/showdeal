@@ -49,17 +49,8 @@ router.post('/request', passwordResetRateLimit, async (req, res) => {
     const result = await createPasswordResetToken(email, clientIP, userAgent);
 
     if (result.success) {
-      // In a real application, you would send an email here
-      // For now, we'll return the token for testing purposes
-      // TODO: Implement email sending service
-
       res.json({
-        message: result.message,
-        // Remove this in production - only for testing
-        ...(process.env.NODE_ENV === 'development' && result.token && {
-          resetToken: result.token,
-          note: 'This token is only shown in development mode for testing'
-        })
+        message: result.message
       });
     } else {
       res.status(400).json({

@@ -29,6 +29,16 @@ function toId(idParam) {
   return BigInt(s);
 }
 
+const NON_ADMIN_RESTRICTED_FIELDS = new Set([
+  "id_role",
+  "id_company",
+  "additional",
+  "password",
+  "user_1",
+  "user",
+  "authentication",
+]);
+
 router.use(requireAuth);
 
 router.get("/meta/options", requireModuleAccess("r_user", "read"), async (req, res, next) => {
@@ -92,6 +102,18 @@ router.post("/", requireModuleAccess("r_user", "create"), async (req, res, next)
 router.put("/:id", requireModuleAccess("r_user", "update"), requireOwnership("r_user"), async (req, res, next) => {
   try {
     const id = toId(req.params.id);
+    if (req.auth?.isAdmin !== true) {
+      const attemptedSensitiveFields = Object.keys(req.body || {}).filter((key) =>
+        NON_ADMIN_RESTRICTED_FIELDS.has(String(key))
+      );
+      if (attemptedSensitiveFields.length > 0) {
+        return res.status(403).json({
+          ok: false,
+          error: "FORBIDDEN_SENSITIVE_UPDATE",
+          fields: attemptedSensitiveFields,
+        });
+      }
+    }
     const data = await updateUser(id, req.body || {});
     audit({
       req,

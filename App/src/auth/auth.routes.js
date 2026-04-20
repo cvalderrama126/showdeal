@@ -1,7 +1,6 @@
 const router = require("express").Router();
 const { z } = require("zod");
 const rateLimit = require("express-rate-limit");
-const csurf = require("csurf");
 const { requireAuth, jsonSafe } = require("./auth.middleware");
 const { login, verifyOtp, otpSetup, otpEnable, otpDisable, changePassword, changePasswordForced } = require("./auth.service");
 const { getModulePermissions } = require("../routes/access.guard");
@@ -33,17 +32,59 @@ const otpLimiter = rateLimit({
 });
 
 
-// ✅ CSRF PROTECTION (Security: prevent CSRF attacks)
-// Only enable in production - in development, frontend needs token generation
-const csrfProtection = process.env.NODE_ENV === 'production' 
-  ? csurf({
-      cookie: {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'strict'
-      }
-    })
-  : (req, res, next) => next(); // Skip CSRF in development
+const TOKEN_COOKIE_NAME = "sd_access_token";
+const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function isSecureRequest(req) {
+  if (process.env.NODE_ENV === "production") return true;
+  if (req.secure) return true;
+  return String(req.headers["x-forwarded-proto"] || "").toLowerCase() === "https";
+}
+
+function authCookieOptions(req) {
+  const secure = isSecureRequest(req);
+  return {
+    httpOnly: true,
+    secure,
+    sameSite: secure ? "none" : "lax",
+    path: "/",
+    maxAge: 8 * 60 * 60 * 1000,
+  };
+}
+
+function setAuthCookie(req, res, token) {
+  if (!token) return;
+  res.cookie(TOKEN_COOKIE_NAME, token, authCookieOptions(req));
+}
+
+function clearAuthCookie(req, res) {
+  res.clearCookie(TOKEN_COOKIE_NAME, authCookieOptions(req));
+}
+
+function extractOriginHost(value) {
+  if (!value) return null;
+  try {
+    return new URL(value).host;
+  } catch {
+    return null;
+  }
+}
+
+function isSameOriginRequest(req) {
+  const originHost = extractOriginHost(req.headers.origin);
+  const refererHost = extractOriginHost(req.headers.referer);
+  const expectedHost = req.get("host");
+  if (!expectedHost) return false;
+  if (originHost) return originHost === expectedHost;
+  if (refererHost) return refererHost === expectedHost;
+  return process.env.NODE_ENV !== "production";
+}
+
+function requireSameOriginForStateChange(req, res, next) {
+  if (!STATE_CHANGING_METHODS.has(req.method)) return next();
+  if (isSameOriginRequest(req)) return next();
+  return res.status(403).json({ ok: false, error: "CSRF_ORIGIN_REJECTED" });
+}
 // ✅ INPUT VALIDATION SCHEMAS
 const loginSchema = z.object({
   user: z.string().trim().min(1, "Username required").max(100, "Username too long"),
@@ -64,23 +105,28 @@ function canManageOtpForUser(req, targetUserId) {
   return String(req.auth?.sub || "") === String(targetUserId || "");
 }
 
-function respondWithResult(res, result) {
+function respondWithResult(req, res, result) {
+  const payload = result.ok
+    ? { ok: true, ...(result.data || {}) }
+    : {
+        ok: false,
+        error: result.error,
+        code: result.code,
+        requireChange: result.requireChange,
+        user: result.user,
+      };
+
+  if (result?.ok && payload.token) {
+    setAuthCookie(req, res, payload.token);
+    delete payload.token;
+  }
+
   return res.status(result.status).json(
-    jsonSafe(
-      result.ok
-        ? { ok: true, ...result.data }
-        : {
-            ok: false,
-            error: result.error,
-            code: result.code,
-            requireChange: result.requireChange,
-            user: result.user,
-          }
-    )
+    jsonSafe(payload)
   );
 }
 
-router.post("/login", authLimiter, csrfProtection, async (req, res, next) => {
+router.post("/login", authLimiter, requireSameOriginForStateChange, async (req, res, next) => {
   try {
     // ✅ VALIDATE INPUT
     const validated = loginSchema.parse(req.body);
@@ -112,7 +158,7 @@ router.post("/login", authLimiter, csrfProtection, async (req, res, next) => {
       });
     }
 
-    return respondWithResult(res, result);
+    return respondWithResult(req, res, result);
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({
@@ -125,7 +171,7 @@ router.post("/login", authLimiter, csrfProtection, async (req, res, next) => {
   }
 });
 
-router.post("/otp/verify", otpLimiter, csrfProtection, async (req, res, next) => {
+router.post("/otp/verify", otpLimiter, requireSameOriginForStateChange, async (req, res, next) => {
   try {
     // ✅ VALIDATE INPUT
     const validated = otpVerifySchema.parse(req.body);
@@ -139,7 +185,7 @@ router.post("/otp/verify", otpLimiter, csrfProtection, async (req, res, next) =>
       data: { reason: result?.ok ? null : result?.error },
     });
 
-    return respondWithResult(res, result);
+    return respondWithResult(req, res, result);
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({
@@ -156,11 +202,11 @@ router.post("/otp/verify", otpLimiter, csrfProtection, async (req, res, next) =>
  * Setup TOTP (genera secreto + otpauth_url) - requiere JWT (usuario logueado sin OTP o admin)
  * Si quieres forzar que SOLO admins activen TOTP, lo ajustamos luego.
  */
-router.post("/otp/setup", requireAuth, csrfProtection, async (req, res, next) => {
+router.post("/otp/setup", requireAuth, requireSameOriginForStateChange, async (req, res, next) => {
   try {
     const id_user = req.auth?.sub;
     const result = await otpSetup({ id_user, issuer: "ShowDeal" });
-    return respondWithResult(res, result);
+    return respondWithResult(req, res, result);
   } catch (err) {
     return next(err);
   }
@@ -169,13 +215,13 @@ router.post("/otp/setup", requireAuth, csrfProtection, async (req, res, next) =>
 /**
  * Enable TOTP (valida un OTP y habilita)
  */
-router.post("/otp/enable", requireAuth, csrfProtection, async (req, res, next) => {
+router.post("/otp/enable", requireAuth, requireSameOriginForStateChange, async (req, res, next) => {
   try {
     const id_user = req.auth?.sub;
     // ✅ VALIDATE INPUT
     const validated = otpEnableSchema.parse(req.body);
     const result = await otpEnable({ id_user, otp: validated.otp });
-    return respondWithResult(res, result);
+    return respondWithResult(req, res, result);
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({
@@ -188,7 +234,7 @@ router.post("/otp/enable", requireAuth, csrfProtection, async (req, res, next) =
   }
 });
 
-router.post("/otp/setup/:id_user", requireAuth, csrfProtection, async (req, res, next) => {
+router.post("/otp/setup/:id_user", requireAuth, requireSameOriginForStateChange, async (req, res, next) => {
   try {
     const id_user = req.params?.id_user;
     if (!id_user || !/^\d+$/.test(String(id_user))) {
@@ -200,13 +246,13 @@ router.post("/otp/setup/:id_user", requireAuth, csrfProtection, async (req, res,
     }
 
     const result = await otpSetup({ id_user, issuer: "ShowDeal" });
-    return respondWithResult(res, result);
+    return respondWithResult(req, res, result);
   } catch (err) {
     return next(err);
   }
 });
 
-router.post("/otp/enable/:id_user", requireAuth, csrfProtection, async (req, res, next) => {
+router.post("/otp/enable/:id_user", requireAuth, requireSameOriginForStateChange, async (req, res, next) => {
   try {
     const id_user = req.params?.id_user;
     if (!id_user || !/^\d+$/.test(String(id_user))) {
@@ -222,7 +268,7 @@ router.post("/otp/enable/:id_user", requireAuth, csrfProtection, async (req, res
     if (result?.ok) {
       audit({ req, action: "OTP_ENABLE", entity: "r_user", entityId: id_user });
     }
-    return respondWithResult(res, result);
+    return respondWithResult(req, res, result);
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({
@@ -235,7 +281,7 @@ router.post("/otp/enable/:id_user", requireAuth, csrfProtection, async (req, res
   }
 });
 
-router.post("/otp/disable/:id_user", requireAuth, csrfProtection, async (req, res, next) => {
+router.post("/otp/disable/:id_user", requireAuth, requireSameOriginForStateChange, async (req, res, next) => {
   try {
     const id_user = req.params?.id_user;
     if (!id_user || !/^\d+$/.test(String(id_user))) {
@@ -250,13 +296,13 @@ router.post("/otp/disable/:id_user", requireAuth, csrfProtection, async (req, re
     if (result?.ok) {
       audit({ req, action: "OTP_DISABLE", entity: "r_user", entityId: id_user });
     }
-    return respondWithResult(res, result);
+    return respondWithResult(req, res, result);
   } catch (err) {
     return next(err);
   }
 });
 
-router.post("/password/change", requireAuth, csrfProtection, async (req, res, next) => {
+router.post("/password/change", requireAuth, requireSameOriginForStateChange, async (req, res, next) => {
   try {
     const id_user = req.auth?.sub;
     const schema = z.object({
@@ -270,7 +316,7 @@ router.post("/password/change", requireAuth, csrfProtection, async (req, res, ne
       currentPassword: validated.currentPassword,
       newPassword: validated.newPassword
     });
-    return respondWithResult(res, result);
+    return respondWithResult(req, res, result);
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({
@@ -283,7 +329,7 @@ router.post("/password/change", requireAuth, csrfProtection, async (req, res, ne
   }
 });
 
-router.post("/password/change-forced/:id_user", requireAuth, csrfProtection, async (req, res, next) => {
+router.post("/password/change-forced/:id_user", requireAuth, requireSameOriginForStateChange, async (req, res, next) => {
   try {
     const id_user = req.params?.id_user;
     if (!id_user || !/^\d+$/.test(String(id_user))) {
@@ -304,7 +350,7 @@ router.post("/password/change-forced/:id_user", requireAuth, csrfProtection, asy
       id_user,
       newPassword: validated.newPassword
     });
-    return respondWithResult(res, result);
+    return respondWithResult(req, res, result);
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({
@@ -317,7 +363,7 @@ router.post("/password/change-forced/:id_user", requireAuth, csrfProtection, asy
   }
 });
 
-router.post("/password/setup-first-login", requireAuth, csrfProtection, async (req, res, next) => {
+router.post("/password/setup-first-login", requireAuth, requireSameOriginForStateChange, async (req, res, next) => {
   try {
     const id_user = req.auth?.sub;
     
@@ -330,7 +376,7 @@ router.post("/password/setup-first-login", requireAuth, csrfProtection, async (r
       id_user,
       newPassword: validated.newPassword
     });
-    return respondWithResult(res, result);
+    return respondWithResult(req, res, result);
   } catch (err) {
     if (err instanceof z.ZodError) {
       return res.status(400).json({
@@ -343,10 +389,16 @@ router.post("/password/setup-first-login", requireAuth, csrfProtection, async (r
   }
 });
 
-router.get("/csrf-token", csrfProtection, (req, res) => {
+router.post("/logout", requireSameOriginForStateChange, (req, res) => {
+  clearAuthCookie(req, res);
+  return res.json({ ok: true });
+});
+
+router.get("/csrf-token", (req, res) => {
   return res.json({
     ok: true,
-    csrfToken: req.csrfToken()
+    csrfToken: null,
+    strategy: "same-origin"
   });
 });
 

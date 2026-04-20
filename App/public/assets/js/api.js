@@ -13,7 +13,7 @@
   }
 
   function getToken() {
-    return getSession()?.token || "";
+    return "";
   }
 
   function setSession(session) {
@@ -25,10 +25,7 @@
   }
 
   function getAuthHeaders(headers = {}) {
-    const nextHeaders = { ...headers };
-    const token = getToken();
-    if (token) nextHeaders.Authorization = `Bearer ${token}`;
-    return nextHeaders;
+    return { ...headers };
   }
 
   async function request(path, { method = "GET", body = null, headers = {} } = {}) {
@@ -46,6 +43,7 @@
 
     const res = await fetch(API_BASE + path, {
       method,
+      credentials: "include",
       headers: nextHeaders,
       body: body
         ? (isFormData ? body : JSON.stringify(body))

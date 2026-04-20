@@ -20,6 +20,7 @@ const AUDITED_MODELS = new Set([
   "r_access",
   "r_module",
 ]);
+const ADMIN_ONLY_MODELS = new Set(["r_access", "r_role", "r_module", "r_log"]);
 
 // Per-model business validations executed before persistence.
 // Each validator throws an HTTP-tagged Error to short-circuit the request.
@@ -331,6 +332,12 @@ function createCrudRouter({
   const r = Router();
 
   if (requireAuth) r.use(requireAuth);
+  if (ADMIN_ONLY_MODELS.has(model)) {
+    r.use((req, res, next) => {
+      if (req.auth?.isAdmin === true) return next();
+      return res.status(403).json({ ok: false, error: "FORBIDDEN_ADMIN_ONLY_MODEL", model });
+    });
+  }
 
   r.get("/", requireModuleAccess(model, "read"), ownershipCheck ? filterByOwnership(model) : (req, res, next) => next(), async (req, res, next) => {
     try {

@@ -163,7 +163,7 @@ const userBaseSchema = z
     user_1: z.string().trim().min(1).optional(),
     name: z.string().trim().min(1),
     is_active: z.boolean().optional().default(true),
-    additional: z.any().nullable().optional(),
+    additional: z.record(z.string(), z.unknown()).nullable().optional(),
     password: z.string().min(8).optional(),
     password_created: z.string().trim().optional().nullable(),
     password_expires: z.string().trim().optional().nullable(),

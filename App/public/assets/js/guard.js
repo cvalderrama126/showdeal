@@ -36,27 +36,13 @@ console.log("[GUARD] loaded on:", location.pathname);
     catch (e) { return { __parseError: String(e), __raw: getSessionRaw() }; }
   }
 
-  function decodeJwtPayload(token) {
-    try {
-      const parts = (token || "").split(".");
-      if (parts.length !== 3) return null;
-      const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-      const json = decodeURIComponent(
-        atob(b64).split("").map(c => "%" + c.charCodeAt(0).toString(16).padStart(2, "0")).join("")
-      );
-      return JSON.parse(json);
-    } catch (e) {
-      return { __decodeError: String(e) };
-    }
-  }
-
-  async function verifyWithBackend(token) {
+  async function verifyWithBackend() {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 5000);
 
     try {
       const resp = await fetch("/auth/me", {
-        headers: { Authorization: "Bearer " + token },
+        credentials: "include",
         signal: controller.signal
       });
 
@@ -83,21 +69,8 @@ console.log("[GUARD] loaded on:", location.pathname);
     if (!s) return kick("NO_SESSION");
     if (s.__parseError) return kick("SESSION_JSON_INVALID", s.__parseError);
 
-    const token = s.token;
-    if (!token) return kick("NO_TOKEN_IN_SESSION");
-
-    const payload = decodeJwtPayload(token);
-    console.log("[GUARD] jwt payload:", payload);
-
-    // Si exp existe, lo validamos. Si no existe, igual seguimos a backend.
-    if (payload?.exp) {
-      const now = Math.floor(Date.now() / 1000);
-      const delta = payload.exp - now;
-      console.log("[GUARD] exp delta:", delta);
-      if (delta <= 0) return kick("JWT_EXPIRED", "delta=" + delta);
-    }
-
-    const ok = await verifyWithBackend(token);
+    if (!s?.user) return kick("NO_SESSION_USER");
+    const ok = await verifyWithBackend();
     if (!ok) return kick("BACKEND_REJECTED_TOKEN");
 
     console.log("[GUARD] ✅ OK");

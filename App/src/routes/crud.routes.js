@@ -398,6 +398,10 @@ router.use(
 
 router.use(
   "/r_log",
+  (req, res, next) => {
+    if (req.auth?.isAdmin === true) return next();
+    return res.status(403).json({ ok: false, error: "FORBIDDEN_ADMIN_ONLY_MODEL", model: "r_log" });
+  },
   createCrudRouter({
     model: "r_log",
     idField: "id_log",

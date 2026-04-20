@@ -12,6 +12,11 @@ const { errorHandler, notFoundHandler } = require("./routes/error.middleware");
 
 function createApp() {
   const app = express();
+  const trustProxy = process.env.TRUST_PROXY;
+  if (trustProxy === "true") app.set("trust proxy", true);
+  else if (trustProxy === "false") app.set("trust proxy", false);
+  else if (trustProxy && /^\d+$/.test(trustProxy)) app.set("trust proxy", Number.parseInt(trustProxy, 10));
+  else app.set("trust proxy", 1);
 
   app.use(
     helmet({
@@ -93,4 +98,3 @@ function createApp() {
 
 
 module.exports = { createApp };
-

@@ -130,8 +130,7 @@ async function createPasswordResetToken(email, ipAddress = null, userAgent = nul
  */
 async function validatePasswordResetToken(token) {
   try {
-    // Find token in database
-    const resetToken = await prisma.r_password_reset_token.findFirst({
+    const activeTokens = await prisma.r_password_reset_token.findMany({
       where: {
         is_active: true,
         used_at: null,
@@ -144,17 +143,25 @@ async function validatePasswordResetToken(token) {
       }
     });
 
-    if (!resetToken) {
+    if (!activeTokens.length) {
       return {
         valid: false,
         message: 'Invalid or expired reset token.'
       };
     }
 
-    // Verify token
-    const isValidToken = await verifyResetToken(token, resetToken.token_hash);
+    let matchedToken = null;
+    for (const candidate of activeTokens) {
+      // bcrypt hashes are salted; compare against each active candidate
+      // eslint-disable-next-line no-await-in-loop
+      const isValid = await verifyResetToken(token, candidate.token_hash);
+      if (isValid) {
+        matchedToken = candidate;
+        break;
+      }
+    }
 
-    if (!isValidToken) {
+    if (!matchedToken) {
       return {
         valid: false,
         message: 'Invalid reset token.'
@@ -163,7 +170,8 @@ async function validatePasswordResetToken(token) {
 
     return {
       valid: true,
-      user: resetToken.r_user,
+      user: matchedToken.r_user,
+      resetTokenId: matchedToken.id_token,
       message: 'Token is valid.'
     };
 
@@ -213,15 +221,28 @@ async function resetPasswordWithToken(token, newPassword) {
       }
     });
 
-    // Mark token as used
+    const usedAt = new Date();
+
+    // Mark token as used by primary key to guarantee single-use semantics
+    await prisma.r_password_reset_token.update({
+      where: {
+        id_token: validation.resetTokenId
+      },
+      data: {
+        used_at: usedAt,
+        is_active: false
+      }
+    });
+
+    // Revoke any other active tokens for the same user
     await prisma.r_password_reset_token.updateMany({
       where: {
-        token_hash: await hashResetToken(token),
+        id_user: user.id_user,
         is_active: true,
         used_at: null
       },
       data: {
-        used_at: new Date(),
+        used_at: usedAt,
         is_active: false
       }
     });

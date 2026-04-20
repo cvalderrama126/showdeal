@@ -28,8 +28,12 @@ function paintUser() {
       e.preventDefault();
       if (window.sdLogout) return window.sdLogout("/index.html");
 
-      localStorage.removeItem(SESSION_KEY);
-      window.location.replace("/index.html");
+      fetch("/auth/logout", { method: "POST", credentials: "include" })
+        .catch(() => {})
+        .finally(() => {
+          localStorage.removeItem(SESSION_KEY);
+          window.location.replace("/index.html");
+        });
     });
   }
 
@@ -119,6 +123,7 @@ function paintUser() {
       const resp = await fetch(`/auth/otp/enable/${userId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ otp: code }),
       });
 
@@ -176,6 +181,7 @@ function paintUser() {
       const resp = await fetch("/auth/password/setup-first-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ newPassword: password }),
       });
 

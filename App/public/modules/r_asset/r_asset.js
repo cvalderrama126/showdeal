@@ -453,10 +453,8 @@ function ensureBulkUploadUi() {
   document.getElementById("assetBulkTemplate").addEventListener("click", async (event) => {
     event.preventDefault();
     try {
-      const session = JSON.parse(localStorage.getItem("showdeal_session") || "null");
-      const token = session?.token || "";
       const resp = await fetch("/api/r_asset/bulk-template", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();

@@ -1,5 +1,4 @@
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const { authenticator } = require("otplib");
 const { prisma } = require("../db/prisma");
@@ -71,10 +70,6 @@ function validateJwtSecret(secret, envVarName) {
   if (charTypeCount < 3) {
     throw new Error(`${envVarName} should contain a mix of lowercase, uppercase, digits, and special characters`);
   }
-}
-
-function sha256Hex(value) {
-  return crypto.createHash("sha256").update(String(value), "utf8").digest("hex");
 }
 
 function parseYmdDate(s) {
@@ -217,8 +212,7 @@ async function verifyPassword(plainPassword, storedPassword) {
     return bcrypt.compare(String(plainPassword || ""), stored);
   }
 
-  const inputHash = sha256Hex(plainPassword);
-  return inputHash === stored.toLowerCase();
+  return false;
 }
 
 /**
@@ -228,61 +222,13 @@ async function verifyPassword(plainPassword, storedPassword) {
  * @param {bigint} userId - User ID for migration
  * @returns {Promise<boolean>} True if password is valid
  */
-async function verifyPasswordWithMigration(plainPassword, storedPassword, userId) {
+async function verifyPasswordWithMigration(plainPassword, storedPassword) {
   const stored = String(storedPassword || "");
   if (!stored) return false;
 
   // If already bcrypt, just verify
   if (/^\$2[aby]\$\d{2}\$/.test(stored)) {
     return bcrypt.compare(String(plainPassword || ""), stored);
-  }
-
-  // If SHA256, verify and migrate
-  if (isSha256Hash(stored)) {
-    const inputHash = sha256Hex(plainPassword);
-    const isValid = inputHash === stored.toLowerCase();
-
-    if (isValid && userId) {
-      // Migrate password to bcrypt in background
-      try {
-        const newHash = await bcryptHash(plainPassword);
-
-        // Update user password in database
-        const user = await prisma.r_user.findUnique({
-          where: { id_user: userId },
-          select: { authentication: true }
-        });
-
-        if (user && user.authentication && Array.isArray(user.authentication)) {
-          const updatedCredentials = user.authentication.map(cred => {
-            if (cred && typeof cred === 'object' && cred.password === stored) {
-              return {
-                ...cred,
-                password: newHash,
-                migrated_from_sha256: true,
-                migrated_at: new Date().toISOString()
-              };
-            }
-            return cred;
-          });
-
-          await prisma.r_user.update({
-            where: { id_user: userId },
-            data: {
-              authentication: updatedCredentials,
-              upd_at: new Date()
-            }
-          });
-
-          console.log(`Password automatically migrated for user ID: ${userId}`);
-        }
-      } catch (error) {
-        console.error('Error migrating password during login:', error);
-        // Don't fail login if migration fails, just log it
-      }
-    }
-
-    return isValid;
   }
 
   // Fallback for unknown hash format
@@ -305,7 +251,18 @@ async function login({ user, password }) {
     return { ok: false, status: 500, error: "User has no password in authentication JSONB" };
   }
 
-  const isValidPassword = await verifyPasswordWithMigration(password, cred.password, dbUser.id_user);
+  if (isSha256Hash(String(cred.password || ""))) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Legacy password format detected. Reset password is required.",
+      code: "PASSWORD_RESET_REQUIRED",
+      requireChange: true,
+      user: buildUserPayload(dbUser),
+    };
+  }
+
+  const isValidPassword = await verifyPasswordWithMigration(password, cred.password);
   if (!isValidPassword) {
     return { ok: false, status: 401, error: "Invalid credentials" };
   }
@@ -544,7 +501,7 @@ async function changePassword({ id_user, currentPassword, newPassword }) {
   }
 
   // Verify current password
-  const isValidPassword = await verifyPasswordWithMigration(currentPassword, cred.password, u.id_user);
+  const isValidPassword = await verifyPasswordWithMigration(currentPassword, cred.password);
   if (!isValidPassword) {
     return { ok: false, status: 401, error: "Current password is incorrect" };
   }
