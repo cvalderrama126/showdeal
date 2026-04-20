@@ -1,0 +1,53 @@
+<div class="sd-card p-4" id="uiThemeRoot">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <div>
+      <h4 class="mb-1">Tema UI</h4>
+      <div class="sd-muted">Personaliza colores del dashboard y guarda tu preferencia local.</div>
+    </div>
+  </div>
+
+  <div class="mb-3">
+    <label class="form-label fw-semibold">Presets</label>
+    <div class="d-flex flex-wrap gap-2">
+      <button type="button" class="btn btn-sd-outline btn-sm" data-theme-preset="default">Default</button>
+      <button type="button" class="btn btn-sd-outline btn-sm" data-theme-preset="ocean">Ocean</button>
+      <button type="button" class="btn btn-sd-outline btn-sm" data-theme-preset="forest">Forest</button>
+      <button type="button" class="btn btn-sd-outline btn-sm" data-theme-preset="midnight">Midnight</button>
+    </div>
+  </div>
+
+  <div class="row g-3">
+    <div class="col-12 col-md-6 col-lg-4">
+      <label class="form-label">Primario</label>
+      <input type="color" class="form-control form-control-color w-100" id="themeVarPrimary" value="#f84300">
+    </div>
+    <div class="col-12 col-md-6 col-lg-4">
+      <label class="form-label">Primario hover</label>
+      <input type="color" class="form-control form-control-color w-100" id="themeVarPrimary2" value="#ff6a3d">
+    </div>
+    <div class="col-12 col-md-6 col-lg-4">
+      <label class="form-label">Acento</label>
+      <input type="color" class="form-control form-control-color w-100" id="themeVarOrange" value="#ff4d00">
+    </div>
+    <div class="col-12 col-md-6 col-lg-4">
+      <label class="form-label">Fondo</label>
+      <input type="color" class="form-control form-control-color w-100" id="themeVarBg" value="#ffffff">
+    </div>
+    <div class="col-12 col-md-6 col-lg-4">
+      <label class="form-label">Tarjeta</label>
+      <input type="color" class="form-control form-control-color w-100" id="themeVarCard" value="#ffffff">
+    </div>
+    <div class="col-12 col-md-6 col-lg-4">
+      <label class="form-label">Sidebar / Topbar</label>
+      <input type="color" class="form-control form-control-color w-100" id="themeVarDark" value="#0b1220">
+    </div>
+  </div>
+
+  <div class="d-flex flex-wrap gap-2 mt-4">
+    <button type="button" class="btn btn-sd-outline" id="btnThemeApply">Aplicar</button>
+    <button type="button" class="btn btn-sd" id="btnThemeSave">Guardar preferencia</button>
+    <button type="button" class="btn btn-outline-secondary" id="btnThemeReset">Restablecer</button>
+  </div>
+
+  <div id="themeAssistantFeedback" class="mt-3"></div>
+</div>
