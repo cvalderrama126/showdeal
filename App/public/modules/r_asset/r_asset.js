@@ -400,4 +400,140 @@ async function init_r_asset() {
       { name: "is_active", label: "Activo", type: "checkbox" },
     ],
   });
+
+  // === BULK UPLOAD UI =====================================================
+  // Inject a toolbar with "Plantilla" + "Carga masiva (Excel)" actions on top
+  // of the asset CRUD module. Posts to POST /api/r_asset/bulk-upload and shows
+  // a per-row report (success / error) in a Bootstrap modal.
+  ensureBulkUploadUi();
+}
+
+function ensureBulkUploadUi() {
+  const root = document.getElementById("crudModuleRoot");
+  if (!root || document.getElementById("assetBulkToolbar")) return;
+
+  const bar = document.createElement("div");
+  bar.id = "assetBulkToolbar";
+  bar.className = "d-flex justify-content-end gap-2 mb-2";
+  bar.innerHTML = `
+    <a id="assetBulkTemplate" class="btn btn-sd-outline btn-sm" href="#" role="button">
+      <i class="bi bi-download"></i> Plantilla Excel
+    </a>
+    <button id="assetBulkBtn" type="button" class="btn btn-sd btn-sm">
+      <i class="bi bi-upload"></i> Carga masiva (Excel)
+    </button>
+    <input id="assetBulkFile" type="file" accept=".xlsx,.xls" class="d-none">
+  `;
+  root.insertBefore(bar, root.firstChild);
+
+  const modalHost = document.createElement("div");
+  modalHost.innerHTML = `
+    <div class="modal fade" id="assetBulkModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content sd-card">
+          <div class="modal-header">
+            <h5 class="modal-title">Resultado de carga masiva</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="assetBulkBody">
+            <div class="text-muted">Procesando...</div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-sd-outline" data-bs-dismiss="modal">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modalHost);
+
+  document.getElementById("assetBulkBtn").addEventListener("click", () => {
+    document.getElementById("assetBulkFile").click();
+  });
+
+  document.getElementById("assetBulkTemplate").addEventListener("click", async (event) => {
+    event.preventDefault();
+    try {
+      const session = JSON.parse(localStorage.getItem("showdeal_session") || "null");
+      const token = session?.token || "";
+      const resp = await fetch("/api/r_asset/bulk-template", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "r_asset_bulk_template.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("No se pudo descargar la plantilla: " + (err?.message || err));
+    }
+  });
+
+  document.getElementById("assetBulkFile").addEventListener("change", async (event) => {
+    const input = event.target;
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    const modalEl = document.getElementById("assetBulkModal");
+    const body = document.getElementById("assetBulkBody");
+    body.innerHTML = '<div class="text-muted">Subiendo y procesando archivo...</div>';
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      let result;
+      try {
+        result = await window.SD_API.request("/api/r_asset/bulk-upload", {
+          method: "POST",
+          body: formData,
+        });
+      } catch (apiErr) {
+        // Partial-success responses (207 Multi-Status) are thrown by SD_API
+        // because ok=false. We still want to render the per-row report.
+        if (apiErr && apiErr.summary && Array.isArray(apiErr.results)) {
+          result = apiErr;
+        } else {
+          throw apiErr;
+        }
+      }
+
+      const summary = result?.summary || {};
+      const rows = Array.isArray(result?.results) ? result.results : [];
+      const failed = rows.filter((r) => !r.ok);
+      const succeeded = rows.filter((r) => r.ok);
+
+      const failedRowsHtml = failed.length
+        ? `<h6 class="mt-3 text-danger">Filas con error (${failed.length})</h6>
+           <ul class="small">${failed
+             .map((r) => `<li>Fila ${r.row}: <code>${r.error || "ROW_FAILED"}</code></li>`)
+             .join("")}</ul>`
+        : "";
+
+      body.innerHTML = `
+        <div class="alert ${failed.length ? "alert-warning" : "alert-success"}">
+          Total: ${summary.totalRows || 0} ·
+          Éxitos: ${summary.success || succeeded.length} ·
+          Errores: ${summary.failed || failed.length}
+        </div>
+        ${failedRowsHtml}
+      `;
+
+      // Refresh table when at least one row was created.
+      if ((summary.success || succeeded.length) > 0 && window.SD_CRUD?.reload) {
+        try { await window.SD_CRUD.reload(); } catch (_) { /* ignore */ }
+      }
+    } catch (err) {
+      body.innerHTML = `<div class="alert alert-danger">
+        Error al cargar: ${(err && err.message) || err}
+      </div>`;
+    } finally {
+      input.value = "";
+    }
+  });
 }

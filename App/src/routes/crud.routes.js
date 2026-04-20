@@ -3,8 +3,10 @@ const { createCrudRouter } = require("./crud.factory");
 const { requireAuth } = require("../auth/auth.middleware");
 const { prisma } = require("../db/prisma");
 const { jsonSafe } = require("./jsonSafe");
+const { audit } = require("../utils/audit.service");
 const attachmentRoutes = require("../attachments/attachment.routes");
 const userRoutes = require("../users/user.routes");
+const assetBulkRoutes = require("../assets/asset-bulk.routes");
 
 function toBigIntId(value) {
   const text = String(value || "").trim();
@@ -30,6 +32,8 @@ router.use(
     requireAuth,
   })
 );
+
+router.use("/r_asset", assetBulkRoutes);
 
 router.use(
   "/r_asset",
@@ -141,6 +145,18 @@ router.post(
           id_user: idUser,
           value: amount,
           is_active: true,
+        },
+      });
+
+      audit({
+        req,
+        action: "BID_CREATE",
+        entity: "r_bid",
+        entityId: created.id_bid,
+        data: {
+          id_auction: String(idAuction),
+          tp_auction: String(auction.tp_auction || ""),
+          value: String(amount),
         },
       });
 
