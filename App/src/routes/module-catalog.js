@@ -14,6 +14,7 @@ const CORE_MODULES = [
   { module: "r_log", is_admin: true },
   { module: "r_module", is_admin: true },
   { module: "r_role", is_admin: true },
+  { module: "r_ui_theme", is_admin: true },
   { module: "r_user", is_admin: true },
 ];
 
