@@ -2,6 +2,7 @@ const router = require("express").Router();
 const { requireAuth, jsonSafe } = require("../auth/auth.middleware");
 const { requireModuleAccess } = require("../routes/access.guard");
 const { requireOwnership, filterByOwnership } = require("../routes/ownership.middleware");
+const { audit } = require("../utils/audit.service");
 const {
   createUser,
   deleteUser,
@@ -75,6 +76,13 @@ router.get("/:id", requireModuleAccess("r_user", "read"), requireOwnership("r_us
 router.post("/", requireModuleAccess("r_user", "create"), async (req, res, next) => {
   try {
     const data = await createUser(req.body || {});
+    audit({
+      req,
+      action: "USER_CREATE",
+      entity: "r_user",
+      entityId: data?.id_user,
+      data: { user: data?.user, name: data?.name, id_company: data?.id_company, id_role: data?.id_role },
+    });
     return res.status(201).json(jsonSafe({ ok: true, data }));
   } catch (err) {
     return next(err);
@@ -85,6 +93,13 @@ router.put("/:id", requireModuleAccess("r_user", "update"), requireOwnership("r_
   try {
     const id = toId(req.params.id);
     const data = await updateUser(id, req.body || {});
+    audit({
+      req,
+      action: "USER_UPDATE",
+      entity: "r_user",
+      entityId: id,
+      data: { changedKeys: Object.keys(req.body || {}) },
+    });
     return res.json(jsonSafe({ ok: true, data }));
   } catch (err) {
     return next(err);
@@ -95,6 +110,7 @@ router.delete("/:id", requireModuleAccess("r_user", "delete"), requireOwnership(
   try {
     const id = toId(req.params.id);
     const data = await deleteUser(id);
+    audit({ req, action: "USER_DELETE", entity: "r_user", entityId: id });
     return res.json(jsonSafe({ ok: true, data }));
   } catch (err) {
     return next(err);

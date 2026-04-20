@@ -4,6 +4,56 @@ const { prisma } = require("../db/prisma");
 const { requireModuleAccess } = require("./access.guard");
 const { jsonSafe } = require("./jsonSafe");
 const { requireOwnership, filterByOwnership } = require("./ownership.middleware");
+const { audit } = require("../utils/audit.service");
+
+// Models that are part of the business core and worth auditing in the generic CRUD layer.
+// The user / auth / OTP flows perform their own (richer) audit calls.
+const AUDITED_MODELS = new Set([
+  "r_company",
+  "r_asset",
+  "r_event",
+  "r_auction",
+  "r_invitation",
+  "r_connection",
+  "r_bid",
+  "r_role",
+  "r_access",
+  "r_module",
+]);
+
+// Per-model business validations executed before persistence.
+// Each validator throws an HTTP-tagged Error to short-circuit the request.
+const BUSINESS_VALIDATORS = {
+  r_event(payload, { current } = {}) {
+    const tp = payload.tp_event !== undefined ? payload.tp_event : current?.tp_event;
+    if (tp !== undefined && tp !== null) {
+      const allowed = new Set(["LIVE", "SEALED_BID"]);
+      if (!allowed.has(String(tp).toUpperCase())) {
+        throw createHttpError(400, "INVALID_TP_EVENT", { allowed: Array.from(allowed) });
+      }
+    }
+
+    const startAt = payload.start_at !== undefined ? payload.start_at : current?.start_at;
+    const endAt = payload.end_at !== undefined ? payload.end_at : current?.end_at;
+    if (startAt && endAt) {
+      const s = new Date(startAt);
+      const e = new Date(endAt);
+      if (!Number.isNaN(s.getTime()) && !Number.isNaN(e.getTime()) && s.getTime() >= e.getTime()) {
+        throw createHttpError(400, "EVENT_DATES_INVALID", {
+          message: "start_at must be strictly before end_at",
+        });
+      }
+    }
+  },
+  r_auction(payload) {
+    if (payload.tp_auction !== undefined && payload.tp_auction !== null) {
+      const allowed = new Set(["LIVE", "SEALED_BID"]);
+      if (!allowed.has(String(payload.tp_auction).toUpperCase())) {
+        throw createHttpError(400, "INVALID_TP_AUCTION", { allowed: Array.from(allowed) });
+      }
+    }
+  },
+};
 
 const SYSTEM_FIELDS = new Set(["ins_at", "upd_at"]);
 const MODEL_META_CACHE = new Map();
@@ -356,9 +406,23 @@ function createCrudRouter({
     r.post("/", requireModuleAccess(model, "create"), async (req, res, next) => {
       try {
         const payload = sanitizePayload(model, idField, req.body);
+
+        const validator = BUSINESS_VALIDATORS[model];
+        if (validator) validator(payload, {});
+
         const created = await prisma[model].create({
           data: payload,
         });
+
+        if (AUDITED_MODELS.has(model)) {
+          audit({
+            req,
+            action: `${model.toUpperCase()}_CREATE`,
+            entity: model,
+            entityId: created?.[idField],
+            data: { keys: Object.keys(payload) },
+          });
+        }
 
         res.status(201).json({ ok: true, data: jsonSafe(created) });
       } catch (err) {
@@ -375,10 +439,28 @@ function createCrudRouter({
         const id = toId(req.params.id);
         const payload = sanitizePayload(model, idField, req.body);
 
+        const validator = BUSINESS_VALIDATORS[model];
+        if (validator) {
+          // Load current row so partial updates still pass cross-field rules
+          // (e.g. updating only end_at on r_event must compare with stored start_at).
+          const current = await prisma[model].findUnique({ where: { [idField]: id } });
+          validator(payload, { current });
+        }
+
         const updated = await prisma[model].update({
           where: { [idField]: id },
           data: payload,
         });
+
+        if (AUDITED_MODELS.has(model)) {
+          audit({
+            req,
+            action: `${model.toUpperCase()}_UPDATE`,
+            entity: model,
+            entityId: id,
+            data: { changedKeys: Object.keys(payload) },
+          });
+        }
 
         res.json({ ok: true, data: jsonSafe(updated) });
       } catch (err) {
@@ -404,6 +486,16 @@ function createCrudRouter({
         } else {
           result = await prisma[model].delete({
             where: { [idField]: id },
+          });
+        }
+
+        if (AUDITED_MODELS.has(model)) {
+          audit({
+            req,
+            action: `${model.toUpperCase()}_DELETE`,
+            entity: model,
+            entityId: id,
+            data: { soft: !!(softDelete && hasIsActive) },
           });
         }
 
