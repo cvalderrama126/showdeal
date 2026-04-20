@@ -1,5 +1,13 @@
 const multer = require("multer");
-const { fileTypeFromBuffer } = require("file-type");
+// `file-type` v22+ es ESM-only; lo cargamos con import() dinámico cacheado
+// para mantener la compatibilidad con CommonJS (y con Jest sin transformers).
+let _fileTypePromise = null;
+function getFileTypeFromBuffer() {
+  if (!_fileTypePromise) {
+    _fileTypePromise = import("file-type").then((m) => m.fileTypeFromBuffer);
+  }
+  return _fileTypePromise;
+}
 const router = require("express").Router();
 const { requireAuth } = require("../auth/auth.middleware");
 const { jsonSafe } = require("../routes/jsonSafe");
@@ -87,6 +95,7 @@ const upload = multer({
 
       // ✅ VALIDATE FILE CONTENT (Magic Bytes) - Only for non-empty files
       if (file.size > 0 && file.buffer) {
+        const fileTypeFromBuffer = await getFileTypeFromBuffer();
         const detectedType = await fileTypeFromBuffer(file.buffer);
         if (!detectedType) {
           // Unknown file type - reject
