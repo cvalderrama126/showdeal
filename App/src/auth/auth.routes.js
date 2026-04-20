@@ -5,6 +5,7 @@ const csurf = require("csurf");
 const { requireAuth, jsonSafe } = require("./auth.middleware");
 const { login, verifyOtp, otpSetup, otpEnable, otpDisable, changePassword, changePasswordForced } = require("./auth.service");
 const { getModulePermissions } = require("../routes/access.guard");
+const { audit } = require("../utils/audit.service");
 const passwordResetRoutes = require("./password-reset.routes");
 
 // ✅ RATE LIMITING PARA AUTENTICACIÓN (Security: prevent brute force)
@@ -84,6 +85,33 @@ router.post("/login", authLimiter, csrfProtection, async (req, res, next) => {
     // ✅ VALIDATE INPUT
     const validated = loginSchema.parse(req.body);
     const result = await login(validated);
+
+    // Audit: capture login attempt outcome (success / failure / OTP required)
+    if (result?.ok && result?.data?.requireOtp) {
+      audit({
+        req,
+        action: "LOGIN_OTP_CHALLENGE",
+        entity: "r_user",
+        entityId: result.data.user?.id_user,
+        data: { user: validated.user },
+      });
+    } else if (result?.ok) {
+      audit({
+        req,
+        action: "LOGIN_SUCCESS",
+        entity: "r_user",
+        entityId: result.data?.user?.id_user,
+        data: { user: validated.user, firstLogin: result.data?.firstLogin === true },
+      });
+    } else {
+      audit({
+        req,
+        action: "LOGIN_FAILURE",
+        entity: "r_user",
+        data: { user: validated.user, reason: result?.error, code: result?.code },
+      });
+    }
+
     return respondWithResult(res, result);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -102,6 +130,15 @@ router.post("/otp/verify", otpLimiter, csrfProtection, async (req, res, next) =>
     // ✅ VALIDATE INPUT
     const validated = otpVerifySchema.parse(req.body);
     const result = await verifyOtp(validated);
+
+    audit({
+      req,
+      action: result?.ok ? "OTP_VERIFY_SUCCESS" : "OTP_VERIFY_FAILURE",
+      entity: "r_user",
+      entityId: result?.data?.user?.id_user,
+      data: { reason: result?.ok ? null : result?.error },
+    });
+
     return respondWithResult(res, result);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -182,6 +219,9 @@ router.post("/otp/enable/:id_user", requireAuth, csrfProtection, async (req, res
 
     const validated = otpEnableSchema.parse(req.body);
     const result = await otpEnable({ id_user, otp: validated.otp });
+    if (result?.ok) {
+      audit({ req, action: "OTP_ENABLE", entity: "r_user", entityId: id_user });
+    }
     return respondWithResult(res, result);
   } catch (err) {
     if (err instanceof z.ZodError) {
@@ -207,6 +247,9 @@ router.post("/otp/disable/:id_user", requireAuth, csrfProtection, async (req, re
     }
 
     const result = await otpDisable({ id_user });
+    if (result?.ok) {
+      audit({ req, action: "OTP_DISABLE", entity: "r_user", entityId: id_user });
+    }
     return respondWithResult(res, result);
   } catch (err) {
     return next(err);
