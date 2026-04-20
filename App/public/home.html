@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ShowDeal - Home</title>
+
+  <link href="assets/css/boostrap.min.css" rel="stylesheet">
+  <link href="assets/css/showdeal.css" rel="stylesheet">
+</head>
+
+<body class="sd-body">
+  <!-- Guard de sesión (NO lo quites) -->
+  <script src="assets/js/guard.js"></script>
+
+  <!-- TOP BAR -->
+  <header class="sd-topbar">
+    <div class="container-fluid sd-topbar-inner">
+      <div class="d-flex align-items-center gap-3">
+        <div class="sd-brand">
+          <span class="sd-dot"></span>
+          <span class="sd-brand-text">ShowDeal</span>
+        </div>
+        <span class="sd-badge">Mobilize Financial Services</span>
+      </div>
+    </div>
+    <div class="sd-topbar-accent"></div>
+  </header>
+
+  <!-- MAIN LAYOUT -->
+  <main class="container-fluid sd-shell">
+    <div class="row g-0">
+      <!-- SIDEBAR -->
+      <aside class="col-12 col-lg-3 col-xl-2 sd-sidebar-wrap">
+        <div class="sd-sidebar">
+          <!-- Session card -->
+          <div class="sd-session">
+            <div class="sd-session-label">SESIÓN</div>
+            <div class="sd-session-user">
+              <div class="sd-session-user-name" id="uiUserName">ShowDeal</div>
+              <div class="row">
+                <div class="col">
+                  <div class="sd-session-user-title" id="uiUserLogin">—</div>
+                </div>
+                <div class="col text-end">
+                  <span class="sd-pill" id="uiUserRole">Admin</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Menu -->
+          <nav class="sd-menu">
+            <a class="sd-menu-item" href="#" data-module="r_auction" data-only-admin="1">
+              <span class="sd-bullet"></span>
+              <span>Ofertas Judiciales</span>
+            </a>
+
+            <a class="sd-menu-item" href="#" data-module="r_buyer_offer" data-only-buyer="1">
+              <span class="sd-bullet"></span>
+              <span>Vehículos para ofertar</span>
+            </a>
+
+            <a class="sd-menu-item" href="#" data-module="r_asset">
+              <span class="sd-bullet"></span>
+              <span>Activos</span>
+            </a>
+
+            <a class="sd-menu-item" href="#" data-module="r_event">
+              <span class="sd-bullet"></span>
+              <span>Eventos</span>
+            </a>
+
+            <a class="sd-menu-item" href="#" data-module="r_bid">
+              <span class="sd-bullet"></span>
+              <span>Resultados</span>
+            </a>
+
+            <a class="sd-menu-item" href="#" data-module="r_module">
+              <span class="sd-bullet"></span>
+              <span>Módulos</span>
+            </a>
+
+            <a class="sd-menu-item" href="#" data-module="r_company">
+              <span class="sd-bullet"></span>
+              <span>Compañías</span>
+            </a>
+
+            <a class="sd-menu-item" href="#" data-module="r_role">
+              <span class="sd-bullet"></span>
+              <span>Roles</span>
+            </a>
+
+            <a class="sd-menu-item active" href="#" data-module="r_user">
+              <span class="sd-bullet"></span>
+              <span>Usuarios</span>
+            </a>
+
+            <a class="sd-menu-item" href="#" data-module="r_access">
+              <span class="sd-bullet"></span>
+              <span>Accesos</span>
+            </a>
+          </nav>
+
+          <!-- Logout -->
+          <button class="btn btn-outline-light sd-logout" id="logoutBtn">
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
+
+      <!-- CONTENT -->
+      <section class="col-12 col-lg-9 col-xl-10 sd-content-wrap">
+        <div class="sd-content p-3 p-lg-4">
+          <div id="sdAlertHost"></div>
+
+          <div id="appContent">
+            <div class="sd-card p-4">
+              <h4 class="mb-1">Cargando módulo</h4>
+              <div class="sd-muted">Preparando la vista principal.</div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- First Login Modal -->
+  <div id="firstLoginModal" class="modal fade" tabindex="-1" role="dialog" aria-labelledby="firstLoginModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header bg-dark text-white">
+          <h5 class="modal-title" id="firstLoginModalLabel">Bienvenido - Configuración Inicial Requerida</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" disabled></button>
+        </div>
+        <div class="modal-body">
+          <!-- OTP Setup Section -->
+          <div id="otpSetupSection" style="display: none;">
+            <h6 class="mb-3">🔐 Configurar Autenticación de Dos Factores (2FA)</h6>
+            <p>Para mejorar la seguridad de tu cuenta, configura Google Authenticator:</p>
+            
+            <div class="alert alert-warning">
+              <strong>Importante:</strong> Guarda este código en un lugar seguro. Lo necesitarás si pierdes acceso a tu dispositivo.
+            </div>
+            
+            <div class="card bg-light mb-3">
+              <div class="card-body">
+                <label class="small text-muted d-block mb-2">Tu código secreto:</label>
+                <div class="input-group mb-2">
+                  <input 
+                    type="text" 
+                    class="form-control font-monospace" 
+                    id="otpSecret" 
+                    readonly
+                    style="background-color: #f8f9fa;"
+                  >
+                  <button class="btn btn-outline-secondary" type="button" id="copySecretBtn" onclick="navigator.clipboard.writeText(document.getElementById('otpSecret').value); alert('Código copiado');">
+                    Copiar
+                  </button>
+                </div>
+                
+                <label class="small text-muted d-block mb-2 mt-3">O escanea este código QR:</label>
+                <div id="otpQrContainer" class="text-center mb-3" style="background: white; padding: 10px; border-radius: 4px;">
+                  <img id="otpQrCode" src="" alt="QR Code" style="max-width: 200px; height: auto;">
+                </div>
+              </div>
+            </div>
+            
+            <div class="alert alert-info">
+              <strong>Pasos a seguir:</strong>
+              <ol class="mb-0">
+                <li>Descarga <strong>Google Authenticator</strong>:
+                  <ul class="mt-1">
+                    <li><a href="https://apps.apple.com/app/google-authenticator/id388497605" target="_blank">iOS App Store</a></li>
+                    <li><a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2" target="_blank">Android Google Play</a></li>
+                  </ul>
+                </li>
+                <li>Abre la app y elige <strong>"+"</strong></li>
+                <li>Selecciona <strong>"Escanear código QR"</strong> o ingresa manualmente el código secreto</li>
+                <li>Ingresa el código de 6 dígitos que aparezca en la app</li>
+              </ol>
+            </div>
+
+            <form id="otpValidationForm">
+              <div class="mb-3">
+                <label for="otpCode" class="form-label">Código de 6 dígitos</label>
+                <input 
+                  type="text" 
+                  class="form-control form-control-lg text-center font-monospace" 
+                  id="otpCode" 
+                  placeholder="000000"
+                  maxlength="6"
+                  pattern="\d{6}"
+                  inputmode="numeric"
+                  required
+                >
+              </div>
+              <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-success">Validar y Continuar</button>
+                <button type="button" class="btn btn-outline-secondary" id="skipOtpBtn">Configurar después</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Password Change Section -->
+          <div id="passwordSection">
+            <h6 class="mb-3">🔑 Cambiar Contraseña</h6>
+            <p>Cambia tu contraseña temporal por una más segura:</p>
+            
+            <form id="firstLoginForm">
+              <div class="mb-3">
+                <label for="newPassword" class="form-label">Nueva Contraseña</label>
+                <input 
+                  type="password" 
+                  class="form-control" 
+                  id="newPassword" 
+                  placeholder="Mínimo 8 caracteres"
+                  required
+                >
+                <small class="text-muted">Usa mayúsculas, minúsculas, números y caracteres especiales</small>
+              </div>
+              <div class="mb-3">
+                <label for="confirmPassword" class="form-label">Confirmar Contraseña</label>
+                <input 
+                  type="password" 
+                  class="form-control" 
+                  id="confirmPassword" 
+                  placeholder="Repite la contraseña"
+                  required
+                >
+              </div>
+              <button type="submit" class="btn btn-primary w-100">Continuar →</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/js/jquery.min.js"></script>
+  <script src="assets/js/boostrap.bundle.min.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/auth-client.js"></script>
+  <script src="assets/js/crud-module.js"></script>
+  <script src="assets/js/shell.js"></script>
+  <script src="assets/js/home.js"></script>
+</body>
+</html>

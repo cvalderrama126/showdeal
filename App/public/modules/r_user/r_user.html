@@ -1,0 +1,146 @@
+<div class="sd-card p-4">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div>
+      <h4 class="mb-1">Usuarios</h4>
+      <div class="sd-muted">Gestión de usuarios (CRUD) desde el Home.</div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button class="btn btn-sd-outline" id="btnRefreshUsers">Refrescar</button>
+      <button class="btn btn-sd" id="btnNewUser">+ Nuevo</button>
+    </div>
+  </div>
+
+  <div class="mt-3">
+    <div class="row g-3 mb-3">
+      <div class="col-12 col-lg-5">
+        <label class="form-label">Buscar</label>
+        <input class="form-control" id="usersFilterSearch" placeholder="Usuario, nombre, documento o compania">
+      </div>
+      <div class="col-12 col-md-6 col-lg-3">
+        <label class="form-label">Compañía</label>
+        <select class="form-select" id="usersFilterCompany">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-6 col-lg-2">
+        <label class="form-label">Rol</label>
+        <select class="form-select" id="usersFilterRole">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="col-12 col-lg-2">
+        <label class="form-label d-block">Estado</label>
+        <div class="form-check mt-2">
+          <input class="form-check-input" type="checkbox" id="usersFilterInactive" checked>
+          <label class="form-check-label" for="usersFilterInactive">Incluir inactivos</label>
+        </div>
+      </div>
+    </div>
+
+    <div id="usersAlert"></div>
+
+    <div class="table-responsive">
+      <table class="table table-sm align-middle sd-table" id="tblUsers">
+        <thead>
+          <tr id="tblUsersHead"></tr>
+        </thead>
+        <tbody id="tblUsersBody"></tbody>
+      </table>
+    </div>
+
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3">
+      <div class="sd-muted small" id="usersPaginationInfo">Sin resultados</div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sd-outline btn-sm" id="btnUsersPrev">Anterior</button>
+        <button class="btn btn-sd-outline btn-sm" id="btnUsersNext">Siguiente</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Create/Edit -->
+<div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content sd-card">
+      <div class="modal-header">
+        <h5 class="modal-title" id="userModalTitle">Usuario</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+
+      <div class="modal-body">
+        <div id="userModalAlert"></div>
+
+        <form id="userForm" class="row g-3">
+          <!-- campos renderizados por JS -->
+        </form>
+
+        <div class="sd-muted mt-2" style="font-size:12px;">
+          En edición, deja la contraseña vacía si no quieres reemplazar la credencial actual.
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sd-outline" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-sd" id="btnSaveUser">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Delete -->
+<div class="modal fade" id="confirmDelModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content sd-card">
+      <div class="modal-header">
+        <h5 class="modal-title">Confirmar</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        ¿Seguro que quieres desactivar/eliminar este usuario?
+        <div class="sd-muted mt-2" style="font-size:12px;">
+          (Tu API normalmente hace <b>soft delete</b> dejando <code>is_active=false</code>)
+        </div>
+        <div id="confirmDelInfo" class="mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sd-outline" data-bs-dismiss="modal">No</button>
+        <button type="button" class="btn btn-sd" id="btnConfirmDelete">Sí, eliminar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OTP Enable Modal -->
+<div class="modal fade" id="otpModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content sd-card">
+      <div class="modal-header">
+        <h5 class="modal-title" id="otpModalTitle">Habilitar OTP</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="otpModalAlert"></div>
+        <div class="sd-muted small mb-2" id="otpModalUserInfo"></div>
+        <div class="mb-3">
+          <label class="form-label">Secret OTP</label>
+          <input class="form-control" id="otpSecret" readonly>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">OTP Auth URL</label>
+          <textarea class="form-control" id="otpAuthUrl" rows="3" readonly></textarea>
+          <div class="sd-muted small mt-1">Copia esta URL en tu app autenticadora o escanea el QR si tu app lo soporta.</div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Código OTP (6 dígitos)</label>
+          <input class="form-control" id="otpCode" maxlength="6" placeholder="000000">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sd-outline" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-danger" id="btnDisableOtp" style="display: none;">Deshabilitar OTP</button>
+        <button type="button" class="btn btn-sd" id="btnEnableOtp">Habilitar OTP</button>
+      </div>
+    </div>
+  </div>
+</div>
