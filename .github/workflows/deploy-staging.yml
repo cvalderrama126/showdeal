@@ -1,0 +1,184 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'App/**'
+      - '.github/workflows/deploy-staging.yml'
+  workflow_dispatch:  # Permite deployment manual
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: showdeal
+
+jobs:
+  # ============================================
+  # 1. BUILD DOCKER IMAGE
+  # ============================================
+  build:
+    runs-on: ubuntu-latest
+    
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch,suffix=-{{date 'YYYYMMDDhhmmss'}}
+            type=raw,value=staging-latest
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./App
+          push: true
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:staging-latest
+          cache-to: type=inline
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ')
+            VCS_REF=${{ github.sha }}
+            VERSION=staging-${{ github.run_number }}
+
+  # ============================================
+  # 2. DEPLOY A RAILWAY / RENDER
+  # ============================================
+  deploy-railway:
+    needs: build
+    runs-on: ubuntu-latest
+    
+    # Solo si tenemos Railway configured
+    if: secrets.RAILWAY_API_TOKEN != ''
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Deploy to Railway
+        uses: HaykelHaouchen/railway-action@main
+        with:
+          railway_token: ${{ secrets.RAILWAY_API_TOKEN }}
+          environment: staging
+          service_name: showdeal-api
+        env:
+          NODE_ENV: staging
+          LOG_LEVEL: debug
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET }}
+          JWT_CHALLENGE_SECRET: ${{ secrets.STAGING_JWT_CHALLENGE_SECRET }}
+          REDIS_URL: ${{ secrets.STAGING_REDIS_URL }}
+
+  # ============================================
+  # 3. DEPLOY A RENDER
+  # ============================================
+  deploy-render:
+    needs: build
+    runs-on: ubuntu-latest
+    
+    # Solo si tenemos Render configured
+    if: secrets.RENDER_API_TOKEN != ''
+    
+    steps:
+      - name: Deploy to Render
+        run: |
+          curl -X POST https://api.render.com/deploy/srv-${{ secrets.RENDER_SERVICE_ID }} \
+            -H "accept: application/json" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_TOKEN }}"
+      
+      - name: Wait for deployment
+        run: sleep 60
+
+  # ============================================
+  # 4. RUN SMOKE TESTS
+  # ============================================
+  smoke-tests:
+    needs: [deploy-railway, deploy-render]
+    runs-on: ubuntu-latest
+    if: always()  # Ejecutar incluso si deploy falló
+    
+    steps:
+      - name: Test staging endpoint
+        run: |
+          for i in {1..10}; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" \
+              -H "User-Agent: GitHub-Actions" \
+              ${{ secrets.STAGING_API_URL }}/health)
+            
+            if [ "$response" = "200" ]; then
+              echo "✅ Staging API is healthy"
+              exit 0
+            fi
+            
+            echo "⏳ Attempt $i/10 - Status: $response"
+            sleep 10
+          done
+          
+          echo "❌ Staging API not responding"
+          exit 1
+
+  # ============================================
+  # 5. NOTIFY SLACK
+  # ============================================
+  notify:
+    needs: [build, smoke-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Send Slack notification (success)
+        if: success() && secrets.SLACK_WEBHOOK_URL
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "✅ Staging Deployment Successful",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*✅ ShowDeal Staging Deployed*\nEnvironment: ${{ secrets.STAGING_API_URL }}\nBuild: #${{ github.run_number }}"
+                  }
+                }
+              ]
+            }
+      
+      - name: Send Slack notification (failure)
+        if: failure() && secrets.SLACK_WEBHOOK_URL
+        uses: slackapi/slack-github-action@v1
+        with:
+          webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          payload: |
+            {
+              "text": "❌ Staging Deployment Failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*❌ ShowDeal Staging Deployment Failed*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View logs>"
+                  }
+                }
+              ]
+            }
