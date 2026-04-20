@@ -6,6 +6,7 @@ const { login, verifyOtp, otpSetup, otpEnable, otpDisable, changePassword, chang
 const { getModulePermissions } = require("../routes/access.guard");
 const { audit } = require("../utils/audit.service");
 const passwordResetRoutes = require("./password-reset.routes");
+const { sealToken } = require("./token-cookie");
 
 // ✅ RATE LIMITING PARA AUTENTICACIÓN (Security: prevent brute force)
 const authLimiter = rateLimit({
@@ -32,11 +33,10 @@ const otpLimiter = rateLimit({
 });
 
 
-const TOKEN_COOKIE_NAME = "sd_access_token";
+const TOKEN_COOKIE_NAME = "sd_session_token";
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 function isSecureRequest(req) {
-  if (process.env.NODE_ENV === "production") return true;
   if (req.secure) return true;
   return String(req.headers["x-forwarded-proto"] || "").toLowerCase() === "https";
 }
@@ -46,7 +46,7 @@ function authCookieOptions(req) {
   return {
     httpOnly: true,
     secure,
-    sameSite: secure ? "none" : "lax",
+    sameSite: "strict",
     path: "/",
     maxAge: 8 * 60 * 60 * 1000,
   };
@@ -54,7 +54,8 @@ function authCookieOptions(req) {
 
 function setAuthCookie(req, res, token) {
   if (!token) return;
-  res.cookie(TOKEN_COOKIE_NAME, token, authCookieOptions(req));
+  const sealedToken = sealToken(token);
+  res.cookie(TOKEN_COOKIE_NAME, sealedToken, authCookieOptions(req));
 }
 
 function clearAuthCookie(req, res) {
@@ -77,7 +78,7 @@ function isSameOriginRequest(req) {
   if (!expectedHost) return false;
   if (originHost) return originHost === expectedHost;
   if (refererHost) return refererHost === expectedHost;
-  return process.env.NODE_ENV !== "production";
+  return false;
 }
 
 function requireSameOriginForStateChange(req, res, next) {

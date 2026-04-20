@@ -3,7 +3,7 @@ const path = require("path");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
-const cookieParser = require("cookie-parser");
+const { getCookieValue } = require("./auth/token-cookie");
 
 const healthRouter = require("./routes/health");
 const authRouter = require("./auth/auth.routes");
@@ -15,7 +15,10 @@ function createApp() {
   const trustProxy = process.env.TRUST_PROXY;
   if (trustProxy === "true") app.set("trust proxy", true);
   else if (trustProxy === "false") app.set("trust proxy", false);
-  else if (trustProxy && /^\d+$/.test(trustProxy)) app.set("trust proxy", Number.parseInt(trustProxy, 10));
+  else if (trustProxy && /^\d+$/.test(trustProxy)) {
+    const hops = Number.parseInt(trustProxy, 10);
+    app.set("trust proxy", Math.max(1, Math.min(10, hops)));
+  }
   else app.set("trust proxy", 1);
 
   app.use(
@@ -76,8 +79,27 @@ function createApp() {
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true }));
   
-  // ✅ COOKIE PARSER (Required by csurf for CSRF protection)
-  app.use(cookieParser());
+  // Enforce same-origin on state-changing requests that rely on auth cookies.
+  app.use((req, res, next) => {
+    if (!["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) return next();
+    if (!getCookieValue(req, "sd_session_token")) return next();
+    if (String(req.headers.authorization || "").startsWith("Bearer ")) return next();
+
+    const expectedHost = req.get("host");
+    if (!expectedHost) return res.status(403).json({ ok: false, error: "CSRF_ORIGIN_REJECTED" });
+
+    let originHost = null;
+    let refererHost = null;
+    try {
+      if (req.headers.origin) originHost = new URL(req.headers.origin).host;
+    } catch {}
+    try {
+      if (req.headers.referer) refererHost = new URL(req.headers.referer).host;
+    } catch {}
+
+    if (originHost === expectedHost || refererHost === expectedHost) return next();
+    return res.status(403).json({ ok: false, error: "CSRF_ORIGIN_REJECTED" });
+  });
 
   // Frontend estático (después de helmet)
   app.use(express.static(path.join(__dirname, "..", "public")));

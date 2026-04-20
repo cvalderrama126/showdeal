@@ -155,9 +155,8 @@ async function validatePasswordResetToken(token) {
       // bcrypt hashes are salted; compare against each active candidate
       // eslint-disable-next-line no-await-in-loop
       const isValid = await verifyResetToken(token, candidate.token_hash);
-      if (isValid) {
+      if (isValid && !matchedToken) {
         matchedToken = candidate;
-        break;
       }
     }
 
