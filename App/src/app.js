@@ -35,7 +35,9 @@ function createApp() {
     },
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => process.env.NODE_ENV !== "production" && (req.ip === "::1" || req.ip === "127.0.0.1" || req.ip === "::ffff:127.0.0.1"),
+    skip: (req) =>
+      process.env.NODE_ENV === "test" ||
+      (process.env.NODE_ENV !== "production" && (req.ip === "::1" || req.ip === "127.0.0.1" || req.ip === "::ffff:127.0.0.1")),
   });
   app.use(limiter);
   
