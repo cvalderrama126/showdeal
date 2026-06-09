@@ -1,7 +1,7 @@
 async function init_r_bid() {
   await window.SD_CRUD.mount({
-    title: "Resultados",
-    description: "Pujas registradas por usuario en cada subasta.",
+    title: "Historial de ofertas",
+    description: "Vista tecnica de las pujas registradas por usuario en cada subasta.",
     endpoint: "/api/r_bid",
     listEndpoint: "/api/r_bid?includeInactive=true&take=200",
     idField: "id_bid",

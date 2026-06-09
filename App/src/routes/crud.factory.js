@@ -24,6 +24,70 @@ const AUDITED_MODELS = new Set([
 // Per-model business validations executed before persistence.
 // Each validator throws an HTTP-tagged Error to short-circuit the request.
 const BUSINESS_VALIDATORS = {
+  r_asset(payload, { current } = {}) {
+    const plate = String(payload.uin !== undefined ? payload.uin : (current?.uin || "")).trim().toUpperCase();
+    if (!plate) {
+      throw createHttpError(400, "ASSET_PLATE_REQUIRED", {
+        field: "uin",
+        message: "La placa es obligatoria",
+      });
+    }
+
+    const additionalSource = payload.additional && typeof payload.additional === "object"
+      ? payload.additional
+      : (current?.additional && typeof current.additional === "object" ? current.additional : {});
+
+    const brand = String(
+      additionalSource.marca
+      ?? additionalSource.brand
+      ?? ""
+    ).trim();
+    const model = String(
+      additionalSource.modelo
+      ?? additionalSource.model
+      ?? ""
+    ).trim();
+    const yearRaw = additionalSource.anio ?? additionalSource.year ?? "";
+    const year = Number.parseInt(String(yearRaw).trim(), 10);
+    const currentYear = new Date().getFullYear();
+
+    if (!brand) {
+      throw createHttpError(400, "ASSET_BRAND_REQUIRED", {
+        field: "additional.marca",
+        message: "La marca es obligatoria",
+      });
+    }
+
+    if (!model) {
+      throw createHttpError(400, "ASSET_MODEL_REQUIRED", {
+        field: "additional.modelo",
+        message: "El modelo es obligatorio",
+      });
+    }
+
+    if (!Number.isInteger(year) || year < 1900 || year > currentYear + 1) {
+      throw createHttpError(400, "ASSET_YEAR_INVALID", {
+        field: "additional.anio",
+        min: 1900,
+        max: currentYear + 1,
+        message: "El año del vehiculo es obligatorio y debe ser valido",
+      });
+    }
+
+    payload.uin = plate;
+    payload.tp_asset = "VEHICLE";
+    payload.additional = {
+      ...additionalSource,
+      placa: plate,
+      plate,
+      marca: brand,
+      brand,
+      modelo: model,
+      model,
+      anio: year,
+      year,
+    };
+  },
   r_event(payload, { current } = {}) {
     const tp = payload.tp_event !== undefined ? payload.tp_event : current?.tp_event;
     if (tp !== undefined && tp !== null) {

@@ -30,6 +30,12 @@
       return input.checked === true;
     }
 
+    if (field.type === "select-multiple") {
+      return Array.from(input.selectedOptions || [])
+        .map((option) => String(option.value || "").trim())
+        .filter(Boolean);
+    }
+
     const raw = input.value ?? "";
     const trimmed = typeof raw === "string" ? raw.trim() : raw;
 
@@ -53,9 +59,40 @@
     return String(value);
   }
 
+  function getValueByPath(source, path) {
+    if (!source || typeof source !== "object") return undefined;
+    if (!path || typeof path !== "string") return undefined;
+
+    return path.split(".").reduce((acc, key) => {
+      if (acc === null || acc === undefined) return undefined;
+      if (typeof acc !== "object") return undefined;
+      return acc[key];
+    }, source);
+  }
+
+  function setValueByPath(target, path, value) {
+    if (!target || typeof target !== "object") return;
+    if (!path || typeof path !== "string") return;
+
+    const parts = path.split(".").filter(Boolean);
+    if (!parts.length) return;
+
+    let node = target;
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      const key = parts[i];
+      if (!node[key] || typeof node[key] !== "object" || Array.isArray(node[key])) {
+        node[key] = {};
+      }
+      node = node[key];
+    }
+
+    node[parts[parts.length - 1]] = value;
+  }
+
   function fieldInputValue(field, record) {
-    const value = record?.[field.name];
+    const value = getValueByPath(record, field.name);
     if (field.type === "checkbox") return value === true;
+    if (field.type === "select-multiple") return Array.isArray(value) ? value.map((item) => String(item)) : [];
     if (field.type === "json") return prettyJson(value);
     if (field.type === "datetime-local") return dateTimeLocalValue(value);
     if (field.type === "date") return value ? String(value).slice(0, 10) : "";
@@ -84,23 +121,28 @@
   function renderField(field, record, optionsMap) {
     const currentValue = fieldInputValue(field, record);
     const required = field.required ? "required" : "";
+    const baseColClass = field.type === "select-multiple" ? "col-12" : "col-12 col-md-6";
+    const colClass = field.colClass || baseColClass;
+    const helpText = field.help ? `<div class="form-text">${escapeHtml(field.help)}</div>` : "";
 
     if (field.type === "checkbox") {
       return `
-        <div class="col-12 col-md-6">
+        <div class="${escapeHtml(colClass)}">
           <div class="form-check mt-4">
             <input class="form-check-input" type="checkbox" id="crud_${field.name}" name="${field.name}" ${currentValue ? "checked" : ""}>
             <label class="form-check-label" for="crud_${field.name}">${escapeHtml(field.label)}</label>
           </div>
+          ${helpText}
         </div>
       `;
     }
 
     if (field.type === "json" || field.type === "textarea") {
       return `
-        <div class="col-12">
+        <div class="${escapeHtml(field.colClass || "col-12")}">
           <label class="form-label">${escapeHtml(field.label)}</label>
           <textarea class="form-control" rows="${field.rows || 5}" name="${field.name}" ${required}>${escapeHtml(currentValue)}</textarea>
+          ${helpText}
         </div>
       `;
     }
@@ -115,20 +157,43 @@
         .join("");
 
       return `
-        <div class="col-12 col-md-6">
+        <div class="${escapeHtml(colClass)}">
           <label class="form-label">${escapeHtml(field.label)}</label>
           <select class="form-select" name="${field.name}" ${required}>
             <option value="">Selecciona...</option>
             ${optionHtml}
           </select>
+          ${helpText}
+        </div>
+      `;
+    }
+
+    if (field.type === "select-multiple") {
+      const options = optionsMap.get(field.name) || [];
+      const selectedValues = Array.isArray(currentValue) ? new Set(currentValue.map((item) => String(item))) : new Set();
+      const optionHtml = options
+        .map((item) => {
+          const selected = selectedValues.has(String(item.value));
+          return `<option value="${escapeHtml(item.value)}" ${selected ? "selected" : ""}>${escapeHtml(item.label)}</option>`;
+        })
+        .join("");
+
+      return `
+        <div class="${escapeHtml(colClass)}">
+          <label class="form-label">${escapeHtml(field.label)}</label>
+          <select class="form-select" name="${field.name}" multiple size="${Number.parseInt(field.size || 8, 10)}" ${required}>
+            ${optionHtml}
+          </select>
+          <div class="form-text">${escapeHtml(field.help || "Mantén Ctrl o Cmd para seleccionar varios.")}</div>
         </div>
       `;
     }
 
     return `
-      <div class="col-12 col-md-6">
+      <div class="${escapeHtml(colClass)}">
         <label class="form-label">${escapeHtml(field.label)}</label>
-        <input class="form-control" type="${field.type || "text"}" name="${field.name}" value="${escapeHtml(currentValue)}" ${required} ${field.step ? `step="${field.step}"` : ""} ${field.minLength ? `minlength="${field.minLength}"` : ""}>
+        <input class="form-control" type="${field.type || "text"}" name="${field.name}" value="${escapeHtml(currentValue)}" ${required} ${field.step ? `step="${field.step}"` : ""} ${field.minLength ? `minlength="${field.minLength}"` : ""} ${field.placeholder ? `placeholder="${escapeHtml(field.placeholder)}"` : ""}>
+        ${helpText}
       </div>
     `;
   }
@@ -454,7 +519,7 @@
 
     async function ensureOptionsLoaded() {
       for (const field of config.fields) {
-        if (field.type !== "select") continue;
+        if (field.type !== "select" && field.type !== "select-multiple") continue;
         if (state.fieldOptionLists.has(field.name)) continue;
         state.fieldOptionLists.set(field.name, await loadOptions(field));
       }
@@ -482,7 +547,7 @@
         const value = parseFieldValue(field, input);
         if ((field.optionalOnUpdate || field.optional) && state.editingId && value === "") continue;
         if (field.optionalOnUpdate && state.editingId && value === null) continue;
-        payload[field.name] = value;
+        setValueByPath(payload, field.name, value);
       }
 
       return payload;
@@ -575,15 +640,29 @@
           await config.beforeSave(payload, state);
         }
 
-        if (state.editingId) {
-          await global.SD_API.request(detailEndpoint(state.editingId), {
+        const isEdit = !!state.editingId;
+        let saved;
+
+        if (isEdit) {
+          const response = await global.SD_API.request(detailEndpoint(state.editingId), {
             method: "PUT",
             body: payload,
           });
+          saved = response?.data || null;
         } else {
-          await global.SD_API.request(endpoint, {
+          const response = await global.SD_API.request(endpoint, {
             method: "POST",
             body: payload,
+          });
+          saved = response?.data || null;
+        }
+
+        if (typeof config.afterSave === "function") {
+          await config.afterSave({
+            saved,
+            isEdit,
+            payload,
+            state,
           });
         }
 

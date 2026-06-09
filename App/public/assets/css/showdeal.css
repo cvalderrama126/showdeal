@@ -7,6 +7,42 @@
   --sd-bg:#f6f7fb;
   --sd-card:#ffffff;
 }
+
+.sd-guide-fab {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1060;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sd-primary);
+  color: #fff;
+  font-size: 20px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.2);
+}
+
+.sd-guide-fab:hover {
+  background: var(--sd-primary-2);
+}
+
+.sd-guide-hint {
+  position: fixed;
+  right: 84px;
+  bottom: 33px;
+  z-index: 1059;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #0b1220;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  border: 1px solid rgba(248, 67, 0, 0.35);
+}
 body{
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
   background: var(--sd-bg);
@@ -104,6 +140,25 @@ a:hover{ color: var(--sd-primary-2); }
 }
 .small-caps{ font-variant: all-small-caps; letter-spacing:.8px; }
 
+.modal .sd-card #crudForm .form-label {
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.modal .sd-card #crudForm .form-control,
+.modal .sd-card #crudForm .form-select {
+  border-radius: 10px;
+}
+
+.modal .sd-card #crudForm .form-text {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.modal .sd-card #crudForm select[multiple] {
+  min-height: 170px;
+}
+
 
 /* ===========================
    ShowDeal Home Layout (Header + Sidebar)
@@ -185,6 +240,50 @@ a:hover{ color: var(--sd-primary-2); }
   text-decoration: none;
   font-weight: 600;
   font-size: 14px;
+}
+
+.judicial-lot-actions-row {
+  margin-top: 4px;
+}
+
+.judicial-lot-actions .lot-btn {
+  min-height: 42px;
+  min-width: 170px;
+  border-radius: 10px;
+  font-weight: 700;
+  border-width: 1px;
+  color: #fff !important;
+}
+
+.judicial-lot-actions .lot-btn-template {
+  background: linear-gradient(180deg, #1d4ed8 0%, #1e40af 100%) !important;
+  border-color: #1e40af !important;
+}
+
+.judicial-lot-actions .lot-btn-template:hover {
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%) !important;
+  border-color: #1d4ed8 !important;
+}
+
+.judicial-lot-actions .lot-btn-create {
+  background: linear-gradient(180deg, #ff5b1f 0%, #f84300 100%) !important;
+  border-color: #f84300 !important;
+  box-shadow: 0 6px 14px rgba(248, 67, 0, 0.25);
+}
+
+.judicial-lot-actions .lot-btn-create:hover {
+  background: linear-gradient(180deg, #ff6e3a 0%, #ff4f12 100%) !important;
+  border-color: #ff4f12 !important;
+}
+
+.judicial-lot-actions .lot-btn-refresh {
+  background: linear-gradient(180deg, #475569 0%, #334155 100%) !important;
+  border-color: #334155 !important;
+}
+
+.judicial-lot-actions .lot-btn-refresh:hover {
+  background: linear-gradient(180deg, #64748b 0%, #475569 100%) !important;
+  border-color: #475569 !important;
 }
 
 .sd-toplink:hover{

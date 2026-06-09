@@ -7,6 +7,7 @@
 
   <link href="assets/css/boostrap.min.css" rel="stylesheet">
   <link href="assets/css/showdeal.css" rel="stylesheet">
+  <link href="assets/vendor/shepherd.css" rel="stylesheet">
   <script src="assets/js/theme-manager.js"></script>
 </head>
 
@@ -54,7 +55,12 @@
           <nav class="sd-menu">
             <a class="sd-menu-item" href="#" data-module="r_auction" data-only-admin="1">
               <span class="sd-bullet"></span>
-              <span>Ofertas Judiciales</span>
+              <span>Lotes Judiciales</span>
+            </a>
+
+            <a class="sd-menu-item" href="#" data-module="r_auction_resolution" data-only-admin="1">
+              <span class="sd-bullet"></span>
+              <span>Resultados</span>
             </a>
 
             <a class="sd-menu-item" href="#" data-module="r_buyer_offer" data-only-buyer="1">
@@ -64,17 +70,12 @@
 
             <a class="sd-menu-item" href="#" data-module="r_asset">
               <span class="sd-bullet"></span>
-              <span>Activos</span>
+              <span>Carga de vehículos</span>
             </a>
 
             <a class="sd-menu-item" href="#" data-module="r_event">
               <span class="sd-bullet"></span>
-              <span>Eventos</span>
-            </a>
-
-            <a class="sd-menu-item" href="#" data-module="r_bid">
-              <span class="sd-bullet"></span>
-              <span>Resultados</span>
+              <span>Eventos de subasta</span>
             </a>
 
             <a class="sd-menu-item" href="#" data-module="r_module">
@@ -248,6 +249,7 @@
   <script src="assets/js/boostrap.bundle.min.js"></script>
   <script src="assets/js/api.js"></script>
   <script src="assets/js/auth-client.js"></script>
+  <script type="module" src="assets/js/shepherd-loader.js"></script>
   <script src="assets/js/crud-module.js"></script>
   <script src="assets/js/shell.js"></script>
   <script src="assets/js/home.js"></script>

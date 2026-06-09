@@ -15,6 +15,20 @@ async function init_r_asset() {
     TECHNICAL_REPORT: "Informe tecnico",
   };
 
+  const ASSET_STATUS_OPTIONS = [
+    { value: "REGISTERED", label: "Registrado" },
+    { value: "APPRAISED", label: "Avaluado" },
+    { value: "PUBLISHED", label: "Publicado" },
+    { value: "IN_AUCTION", label: "En subasta" },
+    { value: "SOLD", label: "Vendido" },
+    { value: "UNSOLD", label: "No vendido" },
+    { value: "CANCELLED", label: "Cancelado" },
+  ];
+
+  const ASSET_STATUS_LABELS = Object.fromEntries(
+    ASSET_STATUS_OPTIONS.map((option) => [option.value, option.label])
+  );
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -46,6 +60,11 @@ async function init_r_asset() {
   function attachmentTypeLabel(type) {
     const code = String(type || "").trim().toUpperCase();
     return ATTACH_TYPE_LABELS[code] || type || "";
+  }
+
+  function assetStatusLabel(status) {
+    const code = String(status || "").trim().toUpperCase();
+    return ASSET_STATUS_LABELS[code] || status || "";
   }
 
   function ensureEmbeddedAttachmentUi() {
@@ -169,7 +188,7 @@ async function init_r_asset() {
   async function loadEmbeddedAttachments() {
     if (!attachState.asset?.id_asset) return;
     const response = await window.SD_API.request(
-      `/api/r_attach?id_asset=${encodeURIComponent(attachState.asset.id_asset)}&includeInactive=true&take=200`
+      `/api/r_attach?id_asset=${encodeURIComponent(attachState.asset.id_asset)}&take=200`
     );
     attachState.rows = Array.isArray(response?.data) ? response.data : [];
     renderAttachRows();
@@ -325,33 +344,51 @@ async function init_r_asset() {
 
 
   await window.SD_CRUD.mount({
-    title: "Activos",
-    description: "Catálogo de activos disponibles en ShowDeal.",
+    title: "Carga de vehículos",
+    description: "Carga únicamente vehículos que luego podrán enviarse a subasta.",
     endpoint: "/api/r_asset",
-    listEndpoint: "/api/r_asset?includeInactive=true&take=200",
+    listEndpoint: "/api/r_asset?take=200",
     idField: "id_asset",
     pageSize: 10,
-    searchPlaceholder: "Buscar por UIN, ciudad, direccion o tipo",
-    formHelp: "Los valores monetarios usan decimales. El campo additional es opcional y debe ser JSON válido.",
+    searchPlaceholder: "Buscar por placa, ciudad, marca o modelo",
+    formHelp: "Aquí registras únicamente vehículos para asociarlos a eventos de subasta. Placa, marca, modelo y año son obligatorios.",
     filters: [
       {
         name: "status",
         label: "Estado",
         type: "select",
-        options: ["REGISTERED", "APPRAISED", "PUBLISHED", "IN_AUCTION", "SOLD", "UNSOLD", "CANCELLED"],
+        options: ASSET_STATUS_OPTIONS,
       },
       {
-        name: "tp_asset",
-        label: "Tipo",
+        name: "additional.marca",
+        label: "Marca",
         type: "text",
-        placeholder: "Ej. HOUSE",
+        placeholder: "Ej. Toyota",
       },
     ],
     columns: [
       { key: "id_asset", label: "ID" },
-      { key: "uin", label: "UIN" },
-      { key: "tp_asset", label: "Tipo" },
-      { key: "status", label: "Estado" },
+      { key: "uin", label: "Placa" },
+      {
+        key: "marca",
+        label: "Marca",
+        render: (row) => row?.additional?.marca || row?.additional?.brand || "",
+      },
+      {
+        key: "modelo",
+        label: "Modelo",
+        render: (row) => row?.additional?.modelo || row?.additional?.model || "",
+      },
+      {
+        key: "anio",
+        label: "Año",
+        render: (row) => row?.additional?.anio || row?.additional?.year || "",
+      },
+      {
+        key: "status",
+        label: "Estado",
+        render: (row) => assetStatusLabel(row?.status),
+      },
       { key: "location_city", label: "Ciudad" },
       { key: "reserve_price", label: "Reserva" },
       { key: "is_active", label: "Activo" },
@@ -379,14 +416,16 @@ async function init_r_asset() {
       version_number: "1",
     },
     fields: [
-      { name: "uin", label: "UIN", type: "text", required: true },
-      { name: "tp_asset", label: "Tipo de activo", type: "text", required: true },
+      { name: "uin", label: "Placa", type: "text", required: true },
+      { name: "additional.marca", label: "Marca", type: "text", required: true },
+      { name: "additional.modelo", label: "Modelo", type: "text", required: true },
+      { name: "additional.anio", label: "Año", type: "number", required: true },
       {
         name: "status",
         label: "Estado",
         type: "select",
         required: true,
-        options: ["REGISTERED", "APPRAISED", "PUBLISHED", "IN_AUCTION", "SOLD", "UNSOLD", "CANCELLED"],
+        options: ASSET_STATUS_OPTIONS,
       },
       { name: "book_value", label: "Valor contable", type: "number", step: "0.01", required: true },
       { name: "appraised_value", label: "Avalúo", type: "number", step: "0.01", required: true },
@@ -399,6 +438,38 @@ async function init_r_asset() {
       { name: "version_number", label: "Versión", type: "number", required: true },
       { name: "is_active", label: "Activo", type: "checkbox" },
     ],
+    beforeSave: async (payload) => {
+      payload.uin = String(payload.uin || "").trim().toUpperCase();
+      payload.tp_asset = "VEHICLE";
+
+      const additional = payload.additional && typeof payload.additional === "object"
+        ? payload.additional
+        : {};
+
+      const marca = String(additional.marca || additional.brand || "").trim();
+      const modelo = String(additional.modelo || additional.model || "").trim();
+      const anio = Number.parseInt(String(additional.anio || additional.year || "").trim(), 10);
+      const currentYear = new Date().getFullYear();
+
+      if (!payload.uin) throw new Error("La placa es obligatoria.");
+      if (!marca) throw new Error("La marca es obligatoria.");
+      if (!modelo) throw new Error("El modelo es obligatorio.");
+      if (!Number.isInteger(anio) || anio < 1900 || anio > currentYear + 1) {
+        throw new Error("El año es obligatorio y debe ser válido.");
+      }
+
+      payload.additional = {
+        ...additional,
+        placa: payload.uin,
+        plate: payload.uin,
+        marca,
+        brand: marca,
+        modelo,
+        model: modelo,
+        anio,
+        year: anio,
+      };
+    },
   });
 
   // === BULK UPLOAD UI =====================================================

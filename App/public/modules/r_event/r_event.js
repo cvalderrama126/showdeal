@@ -45,6 +45,12 @@ async function init_r_event() {
     modal: null,
   };
 
+  const eventCreationState = {
+    selectedAssetIds: [],
+    selectedCompanyIds: [],
+    selectedTpAuction: "SEALED_BID",
+  };
+
   function escapeHtml(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -71,12 +77,19 @@ async function init_r_event() {
 
               <div class="row g-3 mb-3">
                 <div class="col-md-9">
-                  <label class="form-label">Activo</label>
+                  <label class="form-label">Vehículo o activo</label>
                   <select class="form-select" id="eventAssetId"></select>
                 </div>
-                <div class="col-md-3 d-grid">
+                <div class="col-md-3">
+                  <label class="form-label">Modalidad</label>
+                  <select class="form-select" id="eventAssetTpAuction">
+                    <option value="SEALED_BID">Oferta única</option>
+                    <option value="LIVE_AUCTION">Oferta en vivo</option>
+                  </select>
+                </div>
+                <div class="col-md-12 d-grid">
                   <label class="form-label">&nbsp;</label>
-                  <button class="btn btn-sd" id="btnEventAssetAdd">Agregar</button>
+                  <button class="btn btn-sd" id="btnEventAssetAdd">Agregar vehículo al evento</button>
                 </div>
               </div>
 
@@ -85,7 +98,8 @@ async function init_r_event() {
                   <thead>
                     <tr>
                       <th>ID</th>
-                      <th>Activo</th>
+                      <th>Vehículo / Activo</th>
+                      <th>Modalidad</th>
                       <th>Acciones</th>
                     </tr>
                   </thead>
@@ -253,7 +267,7 @@ async function init_r_event() {
   async function loadEmbeddedAttachments() {
     if (!attachState.asset?.id_asset) return;
     const response = await window.SD_API.request(
-      `/api/r_attach?id_asset=${encodeURIComponent(attachState.asset.id_asset)}&includeInactive=true&take=200`
+      `/api/r_attach?id_asset=${encodeURIComponent(attachState.asset.id_asset)}&take=200`
     );
     attachState.rows = Array.isArray(response?.data) ? response.data : [];
     renderAttachRows();
@@ -339,9 +353,15 @@ async function init_r_event() {
     const select = document.getElementById("eventAssetId");
     if (!select) return;
     const options = eventAssetState.assets
-      .map((row) => `<option value="${escapeHtml(row.id_asset)}">${escapeHtml(row.uin || row.id_asset)} · ${escapeHtml(row.tp_asset || "")}</option>`)
+      .map((row) => `<option value="${escapeHtml(row.id_asset)}">${escapeHtml(row.uin || row.id_asset)} · ${escapeHtml(row.tp_asset || "")} · ${escapeHtml(row.status || "")}</option>`)
       .join("");
     select.innerHTML = `<option value="">Selecciona...</option>${options}`;
+
+    const tpAuctionSelect = document.getElementById("eventAssetTpAuction");
+    if (tpAuctionSelect && eventAssetState.event?.tp_event) {
+      const tpEvent = String(eventAssetState.event.tp_event || "SEALED_BID").toUpperCase();
+      tpAuctionSelect.value = tpEvent === "LIVE_AUCTION" ? "LIVE_AUCTION" : "SEALED_BID";
+    }
   }
 
   function renderEventAssetRows() {
@@ -361,10 +381,14 @@ async function init_r_event() {
       const deleteBtn = auctionPermissions.delete === true
         ? `<button class="btn btn-sm btn-sd" data-act="delete" data-id="${escapeHtml(row.id_auction)}">Eliminar</button>`
         : "";
+      const tpAuction = String(row.tp_auction || "").toUpperCase() === "LIVE_AUCTION"
+        ? "Oferta en vivo"
+        : "Oferta única";
 
       tr.innerHTML = `
         <td>${escapeHtml(row.id_auction)}</td>
         <td>${escapeHtml(assetLabel)}</td>
+        <td>${escapeHtml(tpAuction)}</td>
         <td><div class="d-flex flex-wrap gap-2">${attachBtn}${deleteBtn}</div></td>
       `;
 
@@ -395,7 +419,7 @@ async function init_r_event() {
     }
 
     const idAsset = String(document.getElementById("eventAssetId")?.value || "").trim();
-    let tpAuction = String(eventAssetState.event.tp_event || "SEALED_BID").toUpperCase();
+    let tpAuction = String(document.getElementById("eventAssetTpAuction")?.value || eventAssetState.event.tp_event || "SEALED_BID").toUpperCase();
     
     // Validate tp_auction is one of the allowed values
     const validTypes = ["SEALED_BID", "LIVE_AUCTION"];
@@ -416,7 +440,7 @@ async function init_r_event() {
     });
 
     await loadEventAssets();
-    showEventAssetAlert("success", "Activo vinculado al evento correctamente");
+    showEventAssetAlert("success", "Vehículo vinculado al evento correctamente");
   }
 
   async function deleteEventAsset(row) {
@@ -511,6 +535,44 @@ async function init_r_event() {
     inviteState.modal.show();
   }
 
+  async function createEventRelations(eventId, assetIds, companyIds, tpAuction) {
+    const uniqueAssets = [...new Set((Array.isArray(assetIds) ? assetIds : []).map((id) => String(id).trim()).filter(Boolean))];
+    const uniqueCompanies = [...new Set((Array.isArray(companyIds) ? companyIds : []).map((id) => String(id).trim()).filter(Boolean))];
+
+    for (const idAsset of uniqueAssets) {
+      try {
+        await window.SD_API.request("/api/r_auction", {
+          method: "POST",
+          body: {
+            id_event: String(eventId),
+            id_asset: idAsset,
+            tp_auction: tpAuction,
+            is_active: true,
+          },
+        });
+      } catch (err) {
+        const status = Number(err?.status || 0);
+        if (status !== 409) throw err;
+      }
+    }
+
+    for (const idCompany of uniqueCompanies) {
+      try {
+        await window.SD_API.request("/api/r_invitation", {
+          method: "POST",
+          body: {
+            id_event: String(eventId),
+            id_company: idCompany,
+            is_active: true,
+          },
+        });
+      } catch (err) {
+        const status = Number(err?.status || 0);
+        if (status !== 409) throw err;
+      }
+    }
+  }
+
   async function openEventAssets(row) {
     if (auctionPermissions.read !== true) {
       throw new Error("Tu perfil no tiene permisos para ver relaciones evento-activo");
@@ -540,7 +602,7 @@ async function init_r_event() {
     eventAssetState.event = row;
     const title = document.getElementById("eventAssetsTitle");
     if (title) {
-      title.textContent = `Activos del evento #${row.id_event} (${row.tp_event || ""})`;
+      title.textContent = `Vehículos del evento #${row.id_event}`;
     }
 
     await loadEventAssetOptions();
@@ -633,28 +695,28 @@ async function init_r_event() {
   });
 
   await window.SD_CRUD.mount({
-    title: "Eventos",
-    description: "Administración de eventos y ventanas de subasta.",
+    title: "Eventos de subasta",
+    description: "Crea el evento con vehículos y compañías invitadas en un solo paso.",
     endpoint: "/api/r_event",
     listEndpoint: "/api/r_event?includeInactive=true&take=200",
     idField: "id_event",
     pageSize: 10,
-    searchPlaceholder: "Buscar por tipo de evento",
-    formHelp: "Las fechas se guardan con hora.",
+    searchPlaceholder: "Buscar por modalidad del evento",
+    formHelp: "Al crear puedes seleccionar uno o más vehículos, la modalidad y las compañías invitadas. Los usuarios activos de compañías invitadas heredarán visibilidad de esas subastas.",
     filters: [
       {
         name: "tp_event",
-        label: "Tipo",
+        label: "Modalidad por defecto",
         type: "select",
         options: [
-          { value: "SEALED_BID", label: "Sobre cerrado" },
-          { value: "LIVE_AUCTION", label: "En vivo" },
+          { value: "SEALED_BID", label: "Oferta única" },
+          { value: "LIVE_AUCTION", label: "Oferta en vivo" },
         ],
       },
     ],
     columns: [
       { key: "id_event", label: "ID" },
-      { key: "tp_event", label: "Tipo" },
+      { key: "tp_event", label: "Modalidad base" },
       { key: "start_at", label: "Inicio" },
       { key: "end_at", label: "Fin" },
       { key: "is_active", label: "Activo" },
@@ -662,7 +724,7 @@ async function init_r_event() {
     rowActions: [
       {
         action: "assets",
-        label: "Activos",
+        label: "Vehículos",
         className: "btn btn-sm btn-sd-outline",
         visible: () => auctionPermissions.read === true,
       },
@@ -681,23 +743,104 @@ async function init_r_event() {
       tp_event: "SEALED_BID",
       start_at: localNow,
       end_at: localNow,
+      additional: {
+        selected_asset_ids: [],
+        invited_company_ids: [],
+      },
       is_active: true,
     },
     fields: [
       {
         name: "tp_event",
-        label: "Tipo de subasta",
+        label: "Modalidad por defecto del evento",
         type: "select",
         required: true,
+        colClass: "col-12 col-lg-6",
         options: [
-          { value: "SEALED_BID", label: "Sobre cerrado" },
-          { value: "LIVE_AUCTION", label: "En vivo" },
+          { value: "SEALED_BID", label: "Oferta única" },
+          { value: "LIVE_AUCTION", label: "Oferta en vivo" },
         ],
-        help: "Tipo de subasta para todos los activos del evento",
+        help: "Esta modalidad se aplicará a los vehículos seleccionados al crear el evento.",
       },
-      { name: "start_at", label: "Inicio", type: "datetime-local", required: true },
-      { name: "end_at", label: "Fin", type: "datetime-local", required: true },
-      { name: "is_active", label: "Activo", type: "checkbox" },
+      {
+        name: "start_at",
+        label: "Inicio",
+        type: "datetime-local",
+        required: true,
+        colClass: "col-12 col-md-6 col-lg-3",
+      },
+      {
+        name: "end_at",
+        label: "Fin",
+        type: "datetime-local",
+        required: true,
+        colClass: "col-12 col-md-6 col-lg-3",
+      },
+      {
+        name: "additional.selected_asset_ids",
+        label: "Vehículos para subasta",
+        type: "select-multiple",
+        required: true,
+        colClass: "col-12 col-xl-6",
+        size: 7,
+        optionsEndpoint: "/api/r_asset?take=500",
+        optionValueKey: "id_asset",
+        optionLabel: (row) => `${row.uin || row.id_asset} · ${row.status || ""}`,
+        help: "Selecciona uno o más vehículos para incluirlos en el evento.",
+      },
+      {
+        name: "additional.invited_company_ids",
+        label: "Compañías invitadas",
+        type: "select-multiple",
+        required: true,
+        colClass: "col-12 col-xl-6",
+        size: 7,
+        optionsEndpoint: "/api/r_company?take=500",
+        optionValueKey: "id_company",
+        optionLabel: (row) => `${row.company || row.id_company}`,
+        help: "Selecciona una o más compañías cuyos usuarios activos podrán ver las subastas del evento.",
+      },
+      { name: "is_active", label: "Activo", type: "checkbox", colClass: "col-12 col-md-6" },
     ],
+    beforeSave: async (payload, state) => {
+      const isEdit = !!state?.editingId;
+      const additional = payload.additional && typeof payload.additional === "object" ? payload.additional : {};
+      const selectedAssets = Array.isArray(additional.selected_asset_ids)
+        ? additional.selected_asset_ids.map((id) => String(id).trim()).filter(Boolean)
+        : [];
+      const selectedCompanies = Array.isArray(additional.invited_company_ids)
+        ? additional.invited_company_ids.map((id) => String(id).trim()).filter(Boolean)
+        : [];
+
+      if (!isEdit && selectedAssets.length === 0) {
+        throw new Error("Debes seleccionar al menos un vehículo.");
+      }
+      if (!isEdit && selectedCompanies.length === 0) {
+        throw new Error("Debes seleccionar al menos una compañía invitada.");
+      }
+
+      eventCreationState.selectedAssetIds = selectedAssets;
+      eventCreationState.selectedCompanyIds = selectedCompanies;
+      eventCreationState.selectedTpAuction = String(payload.tp_event || "SEALED_BID").toUpperCase() === "LIVE_AUCTION"
+        ? "LIVE_AUCTION"
+        : "SEALED_BID";
+
+      payload.additional = {
+        ...(additional || {}),
+      };
+      delete payload.additional.selected_asset_ids;
+      delete payload.additional.invited_company_ids;
+    },
+    afterSave: async ({ saved, isEdit }) => {
+      if (isEdit) return;
+      if (!saved?.id_event) return;
+
+      await createEventRelations(
+        saved.id_event,
+        eventCreationState.selectedAssetIds,
+        eventCreationState.selectedCompanyIds,
+        eventCreationState.selectedTpAuction
+      );
+    },
   });
 }

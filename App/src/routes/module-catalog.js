@@ -6,6 +6,7 @@ const CORE_MODULES = [
   { module: "r_asset", is_admin: false },
   { module: "r_attach", is_admin: false },
   { module: "r_auction", is_admin: false },
+  { module: "r_auction_resolution", is_admin: true },
   { module: "r_bid", is_admin: false },
   { module: "r_company", is_admin: true },
   { module: "r_connection", is_admin: false },

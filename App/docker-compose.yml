@@ -11,6 +11,11 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
       # Minimal logging for production
       POSTGRES_INITDB_ARGS: "-c log_statement=none"
+      # Admin user seed configuration
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@showdeal.com}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-$$2a$$10$$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36P4JlFm}
+      ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Admin User}
+      ADMIN_PHONE: ${ADMIN_PHONE:-+1-555-0000}
     
     ports:
       - "${DB_PORT:-5432}:5432"
@@ -19,7 +24,7 @@ services:
       # Persistencia de datos
       - postgres_data:/var/lib/postgresql/data
       # Script de inicialización (schema + seed)
-      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./docker/init-db.sh:/docker-entrypoint-initdb.d/01-init.sh
     
     networks:
       - showdeal-network
