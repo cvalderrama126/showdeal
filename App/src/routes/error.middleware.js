@@ -139,7 +139,6 @@ function notFoundHandler(req, res) {
   res.status(404).json({
     ok: false,
     error: 'The requested resource was not found.',
-    path: req.path,
     timestamp: new Date().toISOString()
   });
 }

@@ -323,7 +323,11 @@ router.post("/password/change", requireAuth, csrfProtection, async (req, res, ne
     const id_user = req.auth?.sub;
     const schema = z.object({
       currentPassword: z.string().min(1, "Current password required"),
-      newPassword: z.string().min(8, "New password must be at least 8 characters"),
+      newPassword: z.string()
+        .min(8, "New password must be at least 8 characters")
+        .max(128, "New password must be at most 128 characters long")
+        .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+          "New password must contain at least one lowercase letter, one uppercase letter, and one number"),
     });
     
     const validated = schema.parse(req.body);
@@ -358,7 +362,11 @@ router.post("/password/change-forced/:id_user", requireAuth, csrfProtection, asy
     }
 
     const schema = z.object({
-      newPassword: z.string().min(8, "New password must be at least 8 characters"),
+      newPassword: z.string()
+        .min(8, "New password must be at least 8 characters")
+        .max(128, "New password must be at most 128 characters long")
+        .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+          "New password must contain at least one lowercase letter, one uppercase letter, and one number"),
     });
     
     const validated = schema.parse(req.body);
@@ -384,7 +392,11 @@ router.post("/password/setup-first-login", requireAuth, csrfProtection, async (r
     const id_user = req.auth?.sub;
     
     const schema = z.object({
-      newPassword: z.string().min(8, "New password must be at least 8 characters"),
+      newPassword: z.string()
+        .min(8, "New password must be at least 8 characters")
+        .max(128, "New password must be at most 128 characters long")
+        .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
+          "New password must contain at least one lowercase letter, one uppercase letter, and one number"),
     });
     
     const validated = schema.parse(req.body);

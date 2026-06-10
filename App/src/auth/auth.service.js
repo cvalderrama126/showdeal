@@ -443,7 +443,9 @@ async function verifyOtp({ challengeToken, otp }) {
 
   const replayKey = buildOtpReplayKey(u.id_user, otp);
   const canUseOtp = await setIfNotExistsWithTTL(replayKey, "1", OTP_REPLAY_TTL_SECONDS);
-  if (canUseOtp === false) {
+  // Fail-secure: only proceed when Redis explicitly grants permission (true).
+  // null (Redis unavailable) must also be rejected to prevent replay attacks.
+  if (canUseOtp !== true) {
     return { ok: false, status: 401, error: "OTP replay detected" };
   }
 
