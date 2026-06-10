@@ -119,6 +119,24 @@ const otpEnableSchema = z.object({
   otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
 });
 
+const passwordChangeSchema = z.object({
+  currentPassword: z.string().min(1, "Current password required"),
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
+});
+
+const passwordForcedSchema = z.object({
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
+});
+
+function handleZodError(err, res, next) {
+  if (!(err instanceof z.ZodError)) return next(err);
+  return res.status(400).json({
+    ok: false,
+    error: "VALIDATION_ERROR",
+    issues: err.issues.map((issue) => ({ path: issue.path, message: issue.message })),
+  });
+}
+
 function canManageOtpForUser(req, targetUserId) {
   if (req.auth?.isAdmin === true) return true;
   return String(req.auth?.sub || "") === String(targetUserId || "");
@@ -176,14 +194,7 @@ router.post("/login", authLimiter, csrfProtection, async (req, res, next) => {
 
     return respondWithResult(res, result);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      return res.status(400).json({
-        ok: false,
-        error: "VALIDATION_ERROR",
-        issues: err.issues.map(i => ({ path: i.path, message: i.message })),
-      });
-    }
-    return next(err);
+    return handleZodError(err, res, next);
   }
 });
 
@@ -203,14 +214,7 @@ router.post("/otp/verify", otpLimiter, csrfProtection, async (req, res, next) =>
 
     return respondWithResult(res, result);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      return res.status(400).json({
-        ok: false,
-        error: "VALIDATION_ERROR",
-        issues: err.issues.map(i => ({ path: i.path, message: i.message })),
-      });
-    }
-    return next(err);
+    return handleZodError(err, res, next);
   }
 });
 
@@ -220,8 +224,8 @@ router.post("/otp/verify", otpLimiter, csrfProtection, async (req, res, next) =>
  */
 router.post("/otp/setup", requireAuth, csrfProtection, async (req, res, next) => {
   try {
-    const id_user = req.auth?.sub;
-    const result = await otpSetup({ id_user, issuer: "ShowDeal" });
+    const idUser = req.auth?.sub;
+    const result = await otpSetup({ id_user: idUser, issuer: "ShowDeal" });
     return respondWithResult(res, result);
   } catch (err) {
     return next(err);
@@ -233,35 +237,28 @@ router.post("/otp/setup", requireAuth, csrfProtection, async (req, res, next) =>
  */
 router.post("/otp/enable", requireAuth, csrfProtection, async (req, res, next) => {
   try {
-    const id_user = req.auth?.sub;
+    const idUser = req.auth?.sub;
     // ✅ VALIDATE INPUT
     const validated = otpEnableSchema.parse(req.body);
-    const result = await otpEnable({ id_user, otp: validated.otp });
+    const result = await otpEnable({ id_user: idUser, otp: validated.otp });
     return respondWithResult(res, result);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      return res.status(400).json({
-        ok: false,
-        error: "VALIDATION_ERROR",
-        issues: err.issues.map(i => ({ path: i.path, message: i.message })),
-      });
-    }
-    return next(err);
+    return handleZodError(err, res, next);
   }
 });
 
 router.post("/otp/setup/:id_user", requireAuth, csrfProtection, async (req, res, next) => {
   try {
-    const id_user = req.params?.id_user;
-    if (!id_user || !/^\d+$/.test(String(id_user))) {
+    const idUser = req.params.id_user;
+    if (!idUser || !/^\d+$/.test(String(idUser))) {
       return res.status(400).json({ ok: false, error: "INVALID_USER_ID" });
     }
 
-    if (!canManageOtpForUser(req, id_user)) {
+    if (!canManageOtpForUser(req, idUser)) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
-    const result = await otpSetup({ id_user, issuer: "ShowDeal" });
+    const result = await otpSetup({ id_user: idUser, issuer: "ShowDeal" });
     return respondWithResult(res, result);
   } catch (err) {
     return next(err);
@@ -270,47 +267,40 @@ router.post("/otp/setup/:id_user", requireAuth, csrfProtection, async (req, res,
 
 router.post("/otp/enable/:id_user", requireAuth, csrfProtection, async (req, res, next) => {
   try {
-    const id_user = req.params?.id_user;
-    if (!id_user || !/^\d+$/.test(String(id_user))) {
+    const idUser = req.params.id_user;
+    if (!idUser || !/^\d+$/.test(String(idUser))) {
       return res.status(400).json({ ok: false, error: "INVALID_USER_ID" });
     }
 
-    if (!canManageOtpForUser(req, id_user)) {
+    if (!canManageOtpForUser(req, idUser)) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
     const validated = otpEnableSchema.parse(req.body);
-    const result = await otpEnable({ id_user, otp: validated.otp });
+    const result = await otpEnable({ id_user: idUser, otp: validated.otp });
     if (result?.ok) {
-      audit({ req, action: "OTP_ENABLE", entity: "r_user", entityId: id_user });
+      audit({ req, action: "OTP_ENABLE", entity: "r_user", entityId: idUser });
     }
     return respondWithResult(res, result);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      return res.status(400).json({
-        ok: false,
-        error: "VALIDATION_ERROR",
-        issues: err.issues.map(i => ({ path: i.path, message: i.message })),
-      });
-    }
-    return next(err);
+    return handleZodError(err, res, next);
   }
 });
 
 router.post("/otp/disable/:id_user", requireAuth, csrfProtection, async (req, res, next) => {
   try {
-    const id_user = req.params?.id_user;
-    if (!id_user || !/^\d+$/.test(String(id_user))) {
+    const idUser = req.params.id_user;
+    if (!idUser || !/^\d+$/.test(String(idUser))) {
       return res.status(400).json({ ok: false, error: "INVALID_USER_ID" });
     }
 
-    if (!canManageOtpForUser(req, id_user)) {
+    if (!canManageOtpForUser(req, idUser)) {
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
-    const result = await otpDisable({ id_user });
+    const result = await otpDisable({ id_user: idUser });
     if (result?.ok) {
-      audit({ req, action: "OTP_DISABLE", entity: "r_user", entityId: id_user });
+      audit({ req, action: "OTP_DISABLE", entity: "r_user", entityId: idUser });
     }
     return respondWithResult(res, result);
   } catch (err) {
@@ -320,35 +310,23 @@ router.post("/otp/disable/:id_user", requireAuth, csrfProtection, async (req, re
 
 router.post("/password/change", requireAuth, csrfProtection, async (req, res, next) => {
   try {
-    const id_user = req.auth?.sub;
-    const schema = z.object({
-      currentPassword: z.string().min(1, "Current password required"),
-      newPassword: z.string().min(8, "New password must be at least 8 characters"),
-    });
-    
-    const validated = schema.parse(req.body);
+    const idUser = req.auth?.sub;
+    const validated = passwordChangeSchema.parse(req.body);
     const result = await changePassword({ 
-      id_user,
+      id_user: idUser,
       currentPassword: validated.currentPassword,
       newPassword: validated.newPassword
     });
     return respondWithResult(res, result);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      return res.status(400).json({
-        ok: false,
-        error: "VALIDATION_ERROR",
-        issues: err.issues.map(i => ({ path: i.path, message: i.message })),
-      });
-    }
-    return next(err);
+    return handleZodError(err, res, next);
   }
 });
 
 router.post("/password/change-forced/:id_user", requireAuth, csrfProtection, async (req, res, next) => {
   try {
-    const id_user = req.params?.id_user;
-    if (!id_user || !/^\d+$/.test(String(id_user))) {
+    const idUser = req.params.id_user;
+    if (!idUser || !/^\d+$/.test(String(idUser))) {
       return res.status(400).json({ ok: false, error: "INVALID_USER_ID" });
     }
 
@@ -357,51 +335,28 @@ router.post("/password/change-forced/:id_user", requireAuth, csrfProtection, asy
       return res.status(403).json({ ok: false, error: "FORBIDDEN" });
     }
 
-    const schema = z.object({
-      newPassword: z.string().min(8, "New password must be at least 8 characters"),
-    });
-    
-    const validated = schema.parse(req.body);
+    const validated = passwordForcedSchema.parse(req.body);
     const result = await changePasswordForced({ 
-      id_user,
+      id_user: idUser,
       newPassword: validated.newPassword
     });
     return respondWithResult(res, result);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      return res.status(400).json({
-        ok: false,
-        error: "VALIDATION_ERROR",
-        issues: err.issues.map(i => ({ path: i.path, message: i.message })),
-      });
-    }
-    return next(err);
+    return handleZodError(err, res, next);
   }
 });
 
 router.post("/password/setup-first-login", requireAuth, csrfProtection, async (req, res, next) => {
   try {
-    const id_user = req.auth?.sub;
-    
-    const schema = z.object({
-      newPassword: z.string().min(8, "New password must be at least 8 characters"),
-    });
-    
-    const validated = schema.parse(req.body);
+    const idUser = req.auth?.sub;
+    const validated = passwordForcedSchema.parse(req.body);
     const result = await changePasswordForced({ 
-      id_user,
+      id_user: idUser,
       newPassword: validated.newPassword
     });
     return respondWithResult(res, result);
   } catch (err) {
-    if (err instanceof z.ZodError) {
-      return res.status(400).json({
-        ok: false,
-        error: "VALIDATION_ERROR",
-        issues: err.issues.map(i => ({ path: i.path, message: i.message })),
-      });
-    }
-    return next(err);
+    return handleZodError(err, res, next);
   }
 });
 

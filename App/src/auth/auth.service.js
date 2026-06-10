@@ -5,6 +5,7 @@ const { authenticator } = require("otplib");
 const { prisma } = require("../db/prisma");
 const { isSha256Hash, bcryptHash } = require("./password-migration.service");
 const { setIfNotExistsWithTTL } = require("../utils/redis.client");
+const { parseYmdDate, getLatestCredential, mergeAdditional } = require("../utils/common");
 
 const OTP_REPLAY_TTL_SECONDS = 60;
 
@@ -84,43 +85,12 @@ function sha256Hex(value) {
   return crypto.createHash("sha256").update(String(value), "utf8").digest("hex");
 }
 
-function parseYmdDate(s) {
-  if (!s || typeof s !== "string") return null;
-  const d = new Date(`${s}T00:00:00.000Z`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
 function todayUtcYmd() {
   const now = new Date();
   const y = now.getUTCFullYear();
   const m = String(now.getUTCMonth() + 1).padStart(2, "0");
   const d = String(now.getUTCDate()).padStart(2, "0");
   return new Date(`${y}-${m}-${d}T00:00:00.000Z`);
-}
-
-function getLatestCredential(authentication) {
-  const arr = Array.isArray(authentication) ? authentication : [];
-  if (arr.length === 0) return null;
-
-  let best = null;
-  let bestCreated = null;
-
-  for (const item of arr) {
-    const created = parseYmdDate(item?.created);
-    if (!created) continue;
-
-    if (!bestCreated || created.getTime() > bestCreated.getTime()) {
-      bestCreated = created;
-      best = item;
-    }
-  }
-
-  if (!best) {
-    const last = arr[arr.length - 1];
-    return last && typeof last === "object" ? last : null;
-  }
-
-  return best;
 }
 
 function otpInfo(additional) {
@@ -368,27 +338,25 @@ async function login({ user, password }) {
   if (firstLogin && !otp.secret) {
     const secret = authenticator.generateSecret();
     const label = `ShowDeal:${dbUser.login}`;
-    const otpauth_url = authenticator.keyuri(dbUser.login, "ShowDeal", secret);
+    const otpauthUrl = authenticator.keyuri(dbUser.login, "ShowDeal", secret);
 
-    const currentAdditional = dbUser.additional && typeof dbUser.additional === "object" ? dbUser.additional : {};
-    const nextAdditional = {
-      ...currentAdditional,
+    const nextAdditional = mergeAdditional(dbUser.additional, {
       otp: {
         type: "totp",
         enabled: false,
         secret,
         issuer: "ShowDeal",
         label,
-        otpauth_url,
+        otpauth_url: otpauthUrl,
       },
-    };
+    });
 
     await prisma.r_user.update({
       where: { id_user: dbUser.id_user },
       data: { additional: nextAdditional },
     });
 
-    otpSetupData = { secret, otpauth_url, issuer: "ShowDeal", label };
+    otpSetupData = { secret, otpauth_url: otpauthUrl, issuer: "ShowDeal", label };
   }
 
   // Si OTP NO está habilitado -> emite JWT directo
@@ -477,20 +445,18 @@ async function otpSetup({ id_user, issuer = "ShowDeal" }) {
 
   const secret = authenticator.generateSecret();
   const label = `${issuer}:${u.login}`;
-  const otpauth_url = authenticator.keyuri(u.login, issuer, secret);
+  const otpauthUrl = authenticator.keyuri(u.login, issuer, secret);
 
-  const currentAdditional = u.additional && typeof u.additional === "object" ? u.additional : {};
-  const nextAdditional = {
-    ...currentAdditional,
+  const nextAdditional = mergeAdditional(u.additional, {
     otp: {
       type: "totp",
       enabled: false,
       secret,
       issuer,
       label,
-      otpauth_url,
+      otpauth_url: otpauthUrl,
     },
-  };
+  });
 
   await prisma.r_user.update({
     where: { id_user: u.id_user },
@@ -500,7 +466,7 @@ async function otpSetup({ id_user, issuer = "ShowDeal" }) {
   return {
     ok: true,
     status: 200,
-    data: { issuer, label, secret, otpauth_url },
+    data: { issuer, label, secret, otpauth_url: otpauthUrl },
   };
 }
 
@@ -515,14 +481,12 @@ async function otpEnable({ id_user, otp }) {
   const isValid = authenticator.check(String(otp), secret);
   if (!isValid) return { ok: false, status: 401, error: "Invalid OTP" };
 
-  const currentAdditional = u.additional && typeof u.additional === "object" ? u.additional : {};
-  const nextAdditional = {
-    ...currentAdditional,
+  const nextAdditional = mergeAdditional(u.additional, {
     otp: {
-      ...(currentAdditional.otp || {}),
+      ...((u.additional && typeof u.additional === "object" && u.additional.otp) || {}),
       enabled: true,
     },
-  };
+  });
 
   await prisma.r_user.update({
     where: { id_user: u.id_user },
@@ -536,15 +500,13 @@ async function otpDisable({ id_user }) {
   const u = await findUserById(id_user);
   if (!u || u.is_active !== true) return { ok: false, status: 401, error: "Unauthorized" };
 
-  const currentAdditional = u.additional && typeof u.additional === "object" ? u.additional : {};
-  const nextAdditional = {
-    ...currentAdditional,
+  const nextAdditional = mergeAdditional(u.additional, {
     otp: {
-      ...(currentAdditional.otp || {}),
+      ...((u.additional && typeof u.additional === "object" && u.additional.otp) || {}),
       enabled: false,
       secret: null,
     },
-  };
+  });
 
   await prisma.r_user.update({
     where: { id_user: u.id_user },
@@ -552,6 +514,33 @@ async function otpDisable({ id_user }) {
   });
 
   return { ok: true, status: 200, data: { enabled: false } };
+}
+
+async function persistPasswordChange({ user, newPassword }) {
+  const newHash = await bcryptHash(newPassword);
+
+  const authentication = Array.isArray(user.authentication) ? user.authentication : [];
+  const updatedAuthentication = [
+    ...authentication,
+    {
+      type: "password",
+      password: newHash,
+      created: todayUtcYmd().toISOString().split("T")[0],
+      expired: null,
+    },
+  ];
+
+  const nextAdditional = mergeAdditional(user.additional, {
+    first_login: false,
+  });
+
+  await prisma.r_user.update({
+    where: { id_user: user.id_user },
+    data: {
+      authentication: updatedAuthentication,
+      additional: nextAdditional,
+    },
+  });
 }
 
 async function changePassword({ id_user, currentPassword, newPassword }) {
@@ -569,34 +558,7 @@ async function changePassword({ id_user, currentPassword, newPassword }) {
     return { ok: false, status: 401, error: "Current password is incorrect" };
   }
 
-  // Hash new password with bcrypt
-  const newHash = await bcryptHash(newPassword);
-
-  const authentication = Array.isArray(u.authentication) ? u.authentication : [];
-  const updated = [
-    ...authentication,
-    {
-      type: "password",
-      password: newHash,
-      created: todayUtcYmd().toISOString().split("T")[0],
-      expired: null,
-    },
-  ];
-
-  // Mark first_login as false if it was true
-  const currentAdditional = u.additional && typeof u.additional === "object" ? u.additional : {};
-  const nextAdditional = {
-    ...currentAdditional,
-    first_login: false,
-  };
-
-  await prisma.r_user.update({
-    where: { id_user: u.id_user },
-    data: {
-      authentication: updated,
-      additional: nextAdditional,
-    },
-  });
+  await persistPasswordChange({ user: u, newPassword });
 
   return { ok: true, status: 200, data: { passwordChanged: true } };
 }
@@ -605,34 +567,7 @@ async function changePasswordForced({ id_user, newPassword }) {
   const u = await findUserById(id_user);
   if (!u || u.is_active !== true) return { ok: false, status: 401, error: "Unauthorized" };
 
-  // Hash new password with bcrypt
-  const newHash = await bcryptHash(newPassword);
-
-  const authentication = Array.isArray(u.authentication) ? u.authentication : [];
-  const updated = [
-    ...authentication,
-    {
-      type: "password",
-      password: newHash,
-      created: todayUtcYmd().toISOString().split("T")[0],
-      expired: null,
-    },
-  ];
-
-  // Mark first_login as false
-  const currentAdditional = u.additional && typeof u.additional === "object" ? u.additional : {};
-  const nextAdditional = {
-    ...currentAdditional,
-    first_login: false,
-  };
-
-  await prisma.r_user.update({
-    where: { id_user: u.id_user },
-    data: {
-      authentication: updated,
-      additional: nextAdditional,
-    },
-  });
+  await persistPasswordChange({ user: u, newPassword });
 
   return { ok: true, status: 200, data: { passwordChanged: true } };
 }

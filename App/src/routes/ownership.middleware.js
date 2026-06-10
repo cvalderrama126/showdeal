@@ -1,6 +1,22 @@
 // src/routes/ownership.middleware.js
 const { prisma } = require("../db/prisma");
 
+async function getConnectedAssetIds(companyId) {
+  const rows = await prisma.r_connection.findMany({
+    where: { id_company: companyId || 0 },
+    select: { id_asset: true },
+  });
+
+  return rows.map((row) => row.id_asset);
+}
+
+async function getUserCompany(userId) {
+  return prisma.r_user.findUnique({
+    where: { id_user: userId },
+    select: { id_company: true },
+  });
+}
+
 /**
  * Middleware to check ownership of resources
  * Prevents IDOR (Insecure Direct Object Reference) attacks
@@ -15,17 +31,15 @@ function requireOwnership(model, ownershipField) {
       if (!id) return next(); // Skip if no ID parameter
 
       const resourceId = BigInt(id);
-      const userId = req.auth.sub;
+      const userId = BigInt(String(req.auth.sub));
+      const companyId = BigInt(String(req.auth.companyId || 0));
 
       let ownershipCheck = false;
 
       switch (model) {
-        case 'r_user':
+        case 'r_user': {
           // Users can only access users from their own company
-          const userCompany = await prisma.r_user.findUnique({
-            where: { id_user: userId },
-            select: { id_company: true }
-          });
+          const userCompany = await getUserCompany(userId);
 
           if (!userCompany) {
             return res.status(403).json({ ok: false, error: "USER_NOT_FOUND" });
@@ -38,8 +52,9 @@ function requireOwnership(model, ownershipField) {
 
           ownershipCheck = targetUser && targetUser.id_company === userCompany.id_company;
           break;
+        }
 
-        case 'r_bid':
+        case 'r_bid': {
           // Users can only access their own bids
           const bid = await prisma.r_bid.findUnique({
             where: { id_bid: resourceId },
@@ -48,19 +63,16 @@ function requireOwnership(model, ownershipField) {
 
           ownershipCheck = bid && bid.id_user === userId;
           break;
+        }
 
-        case 'r_asset':
+        case 'r_asset': {
           // Users can only access assets connected to their company
-          const userConnections = await prisma.r_connection.findMany({
-            where: { id_company: req.auth.companyId || 0 },
-            select: { id_asset: true }
-          });
-
-          const connectedAssetIds = userConnections.map(conn => conn.id_asset);
+          const connectedAssetIds = await getConnectedAssetIds(companyId);
           ownershipCheck = connectedAssetIds.includes(resourceId);
           break;
+        }
 
-        case 'r_attach':
+        case 'r_attach': {
           // Users can only access attachments of assets they can access
           const attachment = await prisma.r_attach.findUnique({
             where: { id_attach: resourceId },
@@ -68,13 +80,13 @@ function requireOwnership(model, ownershipField) {
           });
 
           if (attachment) {
-            // Reuse asset ownership check
-            const assetCheck = await requireOwnership('r_asset')(req, res, () => true);
-            ownershipCheck = assetCheck === true;
+            const connectedAssetIds = await getConnectedAssetIds(companyId);
+            ownershipCheck = connectedAssetIds.includes(attachment.id_asset);
           }
           break;
+        }
 
-        case 'r_auction':
+        case 'r_auction': {
           // Users can only access auctions of assets they can access
           const auction = await prisma.r_auction.findUnique({
             where: { id_auction: resourceId },
@@ -82,17 +94,17 @@ function requireOwnership(model, ownershipField) {
           });
 
           if (auction) {
-            req.params.id = auction.id_asset.toString();
-            const assetCheck = await requireOwnership('r_asset')(req, res, () => true);
-            req.params.id = id; // Restore original ID
-            ownershipCheck = assetCheck === true;
+            const connectedAssetIds = await getConnectedAssetIds(companyId);
+            ownershipCheck = connectedAssetIds.includes(auction.id_asset);
           }
           break;
+        }
 
-        default:
+        default: {
           // For other models, allow access (admin-only models)
           ownershipCheck = true;
           break;
+        }
       }
 
       if (!ownershipCheck) {
@@ -120,75 +132,64 @@ function filterByOwnership(model) {
       // Admins bypass ownership filters
       if (req.auth && req.auth.isAdmin) return next();
 
-      const userId = req.auth.sub;
+      const userId = BigInt(String(req.auth.sub));
+      const companyId = BigInt(String(req.auth.companyId || 0));
 
       // Add ownership filters to the query
       switch (model) {
-        case 'r_user':
+        case 'r_user': {
           // Filter users by company
-          const userCompany = await prisma.r_user.findUnique({
-            where: { id_user: userId },
-            select: { id_company: true }
-          });
+          const userCompany = await getUserCompany(userId);
 
           if (userCompany) {
             req.ownershipFilter = { id_company: userCompany.id_company };
           }
           break;
+        }
 
-        case 'r_bid':
+        case 'r_bid': {
           // Filter bids by user
           req.ownershipFilter = { id_user: userId };
           break;
+        }
 
-        case 'r_asset':
+        case 'r_asset': {
           // Filter assets by company connections
-          const userConnections = await prisma.r_connection.findMany({
-            where: { id_company: req.auth.companyId || 0 },
-            select: { id_asset: true }
-          });
-
-          const connectedAssetIds = userConnections.map(conn => conn.id_asset);
+          const connectedAssetIds = await getConnectedAssetIds(companyId);
           if (connectedAssetIds.length > 0) {
             req.ownershipFilter = { id_asset: { in: connectedAssetIds } };
           } else {
             req.ownershipFilter = { id_asset: -1 }; // No access to any assets
           }
           break;
+        }
 
-        case 'r_attach':
+        case 'r_attach': {
           // Filter attachments by accessible assets
-          const attachConnections = await prisma.r_connection.findMany({
-            where: { id_company: req.auth.companyId || 0 },
-            select: { id_asset: true }
-          });
-
-          const attachAssetIds = attachConnections.map(conn => conn.id_asset);
+          const attachAssetIds = await getConnectedAssetIds(companyId);
           if (attachAssetIds.length > 0) {
             req.ownershipFilter = { id_asset: { in: attachAssetIds } };
           } else {
             req.ownershipFilter = { id_asset: -1 };
           }
           break;
+        }
 
-        case 'r_auction':
+        case 'r_auction': {
           // Filter auctions by accessible assets
-          const auctionConnections = await prisma.r_connection.findMany({
-            where: { id_company: req.auth.companyId || 0 },
-            select: { id_asset: true }
-          });
-
-          const auctionAssetIds = auctionConnections.map(conn => conn.id_asset);
+          const auctionAssetIds = await getConnectedAssetIds(companyId);
           if (auctionAssetIds.length > 0) {
             req.ownershipFilter = { id_asset: { in: auctionAssetIds } };
           } else {
             req.ownershipFilter = { id_asset: -1 };
           }
           break;
+        }
 
-        default:
+        default: {
           // No ownership filter for admin models
           break;
+        }
       }
 
       next();

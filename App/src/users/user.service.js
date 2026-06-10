@@ -1,12 +1,7 @@
 const bcrypt = require("bcryptjs");
 const { z } = require("zod");
 const { prisma } = require("../db/prisma");
-
-function parseYmdDate(s) {
-  if (!s || typeof s !== "string") return null;
-  const d = new Date(`${s}T00:00:00.000Z`);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
+const { parseYmdDate, getLatestCredential } = require("../utils/common");
 
 function todayUtcYmdString() {
   const now = new Date();
@@ -14,26 +9,6 @@ function todayUtcYmdString() {
   const m = String(now.getUTCMonth() + 1).padStart(2, "0");
   const d = String(now.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
-}
-
-function getLatestCredential(authentication) {
-  const arr = Array.isArray(authentication) ? authentication : [];
-  if (arr.length === 0) return null;
-
-  let best = null;
-  let bestCreated = null;
-
-  for (const item of arr) {
-    const created = parseYmdDate(item?.created);
-    if (!created) continue;
-
-    if (!bestCreated || created.getTime() > bestCreated.getTime()) {
-      bestCreated = created;
-      best = item;
-    }
-  }
-
-  return best || arr[arr.length - 1] || null;
 }
 
 function redactAdditional(additional) {

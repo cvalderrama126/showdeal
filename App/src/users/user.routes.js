@@ -3,6 +3,7 @@ const { requireAuth, jsonSafe } = require("../auth/auth.middleware");
 const { requireModuleAccess } = require("../routes/access.guard");
 const { requireOwnership, filterByOwnership } = require("../routes/ownership.middleware");
 const { audit } = require("../utils/audit.service");
+const { parseInteger } = require("../utils/common");
 const {
   createUser,
   deleteUser,
@@ -11,13 +12,6 @@ const {
   listUsers,
   updateUser,
 } = require("./user.service");
-
-function parseInteger(value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
-  const parsed = Number.parseInt(String(value ?? fallback), 10);
-  if (Number.isNaN(parsed)) return fallback;
-  if (parsed < min) return fallback;
-  return Math.min(parsed, max);
-}
 
 function toId(idParam) {
   const s = String(idParam || "").trim();

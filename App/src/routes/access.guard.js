@@ -1,10 +1,5 @@
 const { prisma } = require("../db/prisma");
-
-function toBigIntOrNull(value) {
-  const s = String(value || "").trim();
-  if (!/^\d+$/.test(s)) return null;
-  return BigInt(s);
-}
+const { toBigIntOrNull } = require("../utils/common");
 
 async function hasAccessConfig(moduleName) {
   const configuredCount = await prisma.r_access.count({

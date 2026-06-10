@@ -1,16 +1,6 @@
 // src/auth/auth.middleware.js
 const jwt = require("jsonwebtoken");
-
-function jsonSafe(value) {
-  if (typeof value === "bigint") return value.toString();
-  if (Array.isArray(value)) return value.map(jsonSafe);
-  if (value && typeof value === "object") {
-    const out = {};
-    for (const [k, v] of Object.entries(value)) out[k] = jsonSafe(v);
-    return out;
-  }
-  return value;
-}
+const { jsonSafe } = require("../routes/jsonSafe");
 
 function requireAuth(req, res, next) {
   try {

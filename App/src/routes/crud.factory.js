@@ -5,6 +5,7 @@ const { requireModuleAccess } = require("./access.guard");
 const { jsonSafe } = require("./jsonSafe");
 const { requireOwnership, filterByOwnership } = require("./ownership.middleware");
 const { audit } = require("../utils/audit.service");
+const { toBigIntOrNull, parseInteger } = require("../utils/common");
 
 // Models that are part of the business core and worth auditing in the generic CRUD layer.
 // The user / auth / OTP flows perform their own (richer) audit calls.
@@ -137,19 +138,6 @@ function toId(idParam) {
   }
 
   return BigInt(s);
-}
-
-function toBigIntOrNull(value) {
-  const s = String(value || "").trim();
-  if (!/^\d+$/.test(s)) return null;
-  return BigInt(s);
-}
-
-function parseInteger(value, fallback, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
-  const parsed = Number.parseInt(String(value ?? fallback), 10);
-  if (Number.isNaN(parsed)) return fallback;
-  if (parsed < min) return fallback;
-  return Math.min(parsed, max);
 }
 
 function getModelMeta(model) {
@@ -400,14 +388,6 @@ function createCrudRouter({
     try {
       const take = parseInteger(req.query.take, 50, { min: 1, max: 200 });
       const skip = parseInteger(req.query.skip, 0, { min: 0, max: 100000 });
-
-      // Additional validation for pagination parameters
-      if (req.query.take !== undefined && (take < 1 || take > 200)) {
-        throw createHttpError(400, "INVALID_TAKE_PARAM", { min: 1, max: 200 });
-      }
-      if (req.query.skip !== undefined && (skip < 0 || skip > 100000)) {
-        throw createHttpError(400, "INVALID_SKIP_PARAM", { min: 0, max: 100000 });
-      }
 
       const where = buildListWhere(model, { hasIsActive, query: req.query });
 

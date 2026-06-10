@@ -256,7 +256,7 @@ async function init_r_user() {
         : '<span class="sd-muted small">Solo lectura</span>';
 
       tdActions.querySelector('[data-act="edit"]')?.addEventListener("click", () => openEdit(row));
-  tdActions.querySelector('[data-act="otp"]')?.addEventListener("click", () => openOtp(row));
+      tdActions.querySelector('[data-act="otp"]')?.addEventListener("click", () => openOtp(row));
       tdActions.querySelector('[data-act="del"]')?.addEventListener("click", () => openDelete(row));
       tr.appendChild(tdActions);
 
