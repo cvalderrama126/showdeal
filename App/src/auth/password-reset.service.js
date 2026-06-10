@@ -1,11 +1,13 @@
 const { prisma } = require('../db/prisma');
 const { generateSecureToken, hashPassword } = require('../utils/crypto.utils');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 // Configuration
 const TOKEN_EXPIRY_MINUTES = 15; // 15 minutes
 const TOKEN_LENGTH = 32; // 32 bytes = 64 hex characters
 const MAX_RESET_ATTEMPTS_PER_HOUR = 3;
+const DUMMY_BCRYPT_HASH = bcrypt.hashSync('showdeal-password-reset-dummy', 10);
 
 /**
  * Generate a cryptographically secure reset token
@@ -20,8 +22,8 @@ function generateResetToken() {
  * @param {string} token - Plain token
  * @returns {Promise<string>} Hashed token
  */
-async function hashResetToken(token) {
-  return await hashPassword(token, 12);
+function hashResetToken(token) {
+  return crypto.createHash('sha256').update(String(token || ''), 'utf8').digest('hex');
 }
 
 /**
@@ -31,7 +33,73 @@ async function hashResetToken(token) {
  * @returns {Promise<boolean>} Verification result
  */
 async function verifyResetToken(token, hash) {
-  return await bcrypt.compare(token, hash);
+  const value = String(hash || '');
+
+  if (/^\$2[aby]\$\d{2}\$/.test(value)) {
+    // Backward compatibility for previously generated bcrypt token hashes.
+    return await bcrypt.compare(String(token || ''), value);
+  }
+
+  const digest = hashResetToken(token);
+  return digest.length === value.length && crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(value));
+}
+
+async function performConstantTimeDummyWork(token) {
+  await bcrypt.compare(String(token || ''), DUMMY_BCRYPT_HASH);
+}
+
+function toIsoDateYmd(date = new Date()) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function buildUpdatedAuthentication(authentication, hashedPassword) {
+  const authArray = Array.isArray(authentication) ? [...authentication] : [];
+
+  if (authArray.length === 0) {
+    return [{
+      password: hashedPassword,
+      algorithm: 'bcrypt',
+      created: toIsoDateYmd(),
+      expired: null,
+    }];
+  }
+
+  let targetIndex = -1;
+  let bestTime = -1;
+
+  for (let i = 0; i < authArray.length; i += 1) {
+    const cred = authArray[i];
+    if (!cred || typeof cred !== 'object' || !cred.password) continue;
+
+    const ts = Date.parse(String(cred.created || ''));
+    const score = Number.isFinite(ts) ? ts : i;
+    if (score >= bestTime) {
+      bestTime = score;
+      targetIndex = i;
+    }
+  }
+
+  if (targetIndex === -1) {
+    authArray.push({
+      password: hashedPassword,
+      algorithm: 'bcrypt',
+      created: toIsoDateYmd(),
+      expired: null,
+    });
+    return authArray;
+  }
+
+  authArray[targetIndex] = {
+    ...authArray[targetIndex],
+    password: hashedPassword,
+    algorithm: 'bcrypt',
+    updated_at: new Date().toISOString(),
+  };
+
+  return authArray;
 }
 
 /**
@@ -75,6 +143,7 @@ async function createPasswordResetToken(email, ipAddress = null, userAgent = nul
 
     if (!user) {
       // Don't reveal if email exists or not for security
+      await performConstantTimeDummyWork(email);
       return {
         success: true,
         message: 'If the email exists, a reset link has been sent.'
@@ -91,7 +160,7 @@ async function createPasswordResetToken(email, ipAddress = null, userAgent = nul
 
     // Generate token
     const token = generateResetToken();
-    const tokenHash = await hashResetToken(token);
+    const tokenHash = hashResetToken(token);
     const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_MINUTES * 60 * 1000);
 
     // Save token to database
@@ -130,9 +199,12 @@ async function createPasswordResetToken(email, ipAddress = null, userAgent = nul
  */
 async function validatePasswordResetToken(token) {
   try {
-    // Find token in database
-    const resetToken = await prisma.r_password_reset_token.findFirst({
+    const tokenHash = hashResetToken(token);
+
+    // Deterministic lookup for current tokens.
+    let resetToken = await prisma.r_password_reset_token.findFirst({
       where: {
+        token_hash: tokenHash,
         is_active: true,
         used_at: null,
         expires_at: {
@@ -144,25 +216,46 @@ async function validatePasswordResetToken(token) {
       }
     });
 
+    // Backward compatibility for legacy bcrypt token hashes.
     if (!resetToken) {
+      const legacyCandidates = await prisma.r_password_reset_token.findMany({
+        where: {
+          is_active: true,
+          used_at: null,
+          expires_at: {
+            gt: new Date()
+          }
+        },
+        include: {
+          r_user: true
+        },
+        orderBy: {
+          ins_at: 'desc'
+        },
+        take: 50
+      });
+
+      for (const candidate of legacyCandidates) {
+        // eslint-disable-next-line no-await-in-loop
+        const matched = await verifyResetToken(token, candidate.token_hash);
+        if (matched) {
+          resetToken = candidate;
+          break;
+        }
+      }
+    }
+
+    if (!resetToken) {
+      await performConstantTimeDummyWork(token);
       return {
         valid: false,
         message: 'Invalid or expired reset token.'
       };
     }
 
-    // Verify token
-    const isValidToken = await verifyResetToken(token, resetToken.token_hash);
-
-    if (!isValidToken) {
-      return {
-        valid: false,
-        message: 'Invalid reset token.'
-      };
-    }
-
     return {
       valid: true,
+      tokenId: resetToken.id_token,
       user: resetToken.r_user,
       message: 'Token is valid.'
     };
@@ -195,35 +288,42 @@ async function resetPasswordWithToken(token, newPassword) {
     }
 
     const user = validation.user;
+    const tokenId = validation.tokenId;
 
     // Hash new password
     const hashedPassword = await hashPassword(newPassword, 12);
 
-    // Update user password
-    await prisma.r_user.update({
-      where: {
-        id_user: user.id_user
-      },
-      data: {
-        authentication: {
-          ...user.authentication,
-          password: hashedPassword
+    // Consume token and update password atomically to prevent race conditions.
+    await prisma.$transaction(async (tx) => {
+      const consumed = await tx.r_password_reset_token.updateMany({
+        where: {
+          id_token: tokenId,
+          is_active: true,
+          used_at: null,
+          expires_at: {
+            gt: new Date()
+          }
         },
-        upd_at: new Date()
-      }
-    });
+        data: {
+          used_at: new Date(),
+          is_active: false,
+          upd_at: new Date()
+        }
+      });
 
-    // Mark token as used
-    await prisma.r_password_reset_token.updateMany({
-      where: {
-        token_hash: await hashResetToken(token),
-        is_active: true,
-        used_at: null
-      },
-      data: {
-        used_at: new Date(),
-        is_active: false
+      if (consumed.count !== 1) {
+        throw new Error('RESET_TOKEN_ALREADY_USED_OR_EXPIRED');
       }
+
+      await tx.r_user.update({
+        where: {
+          id_user: user.id_user
+        },
+        data: {
+          authentication: buildUpdatedAuthentication(user.authentication, hashedPassword),
+          upd_at: new Date()
+        }
+      });
     });
 
     // Clean up expired tokens
@@ -235,6 +335,13 @@ async function resetPasswordWithToken(token, newPassword) {
     };
 
   } catch (error) {
+    if (error?.message === 'RESET_TOKEN_ALREADY_USED_OR_EXPIRED') {
+      return {
+        success: false,
+        message: 'Invalid or expired reset token.'
+      };
+    }
+
     console.error('Error resetting password:', error);
     return {
       success: false,

@@ -52,8 +52,8 @@ function sanitizeError(error) {
     sanitized.code = error.code;
   }
 
-  // In development, include more details for debugging
-  if (process.env.NODE_ENV !== 'production') {
+  // Only expose debugging internals when explicitly enabled.
+  if (process.env.ENABLE_DEBUG_ERRORS === '1') {
     sanitized.originalError = error.message;
     sanitized.stack = error.stack;
   }

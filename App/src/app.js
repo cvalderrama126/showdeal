@@ -13,6 +13,13 @@ const { errorHandler, notFoundHandler } = require("./routes/error.middleware");
 function createApp() {
   const app = express();
 
+  // Ensure req.ip reflects the real client IP when running behind a reverse proxy.
+  if (process.env.TRUST_PROXY) {
+    app.set('trust proxy', process.env.TRUST_PROXY);
+  } else if (process.env.NODE_ENV === 'production') {
+    app.set('trust proxy', 1);
+  }
+
   app.use(
     helmet({
       contentSecurityPolicy: {

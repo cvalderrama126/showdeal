@@ -87,8 +87,11 @@ function verifyHMAC(data, key, hmac) {
  * @returns {string} Encrypted data in format: iv:authTag:encrypted
  */
 function encryptAES(text, key) {
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipher('aes-256-gcm', key);
+  const normalizedKey = Buffer.from(String(key || ''), 'hex').length >= 32
+    ? Buffer.from(String(key), 'hex').subarray(0, 32)
+    : crypto.createHash('sha256').update(String(key || ''), 'utf8').digest();
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', normalizedKey, iv);
 
   let encrypted = cipher.update(text, 'utf8', 'hex');
   encrypted += cipher.final('hex');
@@ -114,13 +117,25 @@ function decryptAES(encryptedData, key) {
   const authTag = Buffer.from(parts[1], 'hex');
   const encrypted = parts[2];
 
-  const decipher = crypto.createDecipher('aes-256-gcm', key);
-  decipher.setAuthTag(authTag);
+  const normalizedKey = Buffer.from(String(key || ''), 'hex').length >= 32
+    ? Buffer.from(String(key), 'hex').subarray(0, 32)
+    : crypto.createHash('sha256').update(String(key || ''), 'utf8').digest();
 
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
+  try {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', normalizedKey, iv);
+    decipher.setAuthTag(authTag);
 
-  return decrypted;
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch (err) {
+    // Backward compatibility for data encrypted with legacy createCipher/createDecipher.
+    const legacy = crypto.createDecipher('aes-256-gcm', String(key || ''));
+    legacy.setAuthTag(authTag);
+    let decrypted = legacy.update(encrypted, 'hex', 'utf8');
+    decrypted += legacy.final('utf8');
+    return decrypted;
+  }
 }
 
 /**
@@ -139,6 +154,10 @@ function generateAESKey() {
  */
 function secureCompare(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') {
+    return false;
+  }
+
+  if (a.length !== b.length) {
     return false;
   }
 

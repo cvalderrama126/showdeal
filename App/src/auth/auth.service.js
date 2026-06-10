@@ -232,6 +232,10 @@ async function verifyPasswordWithMigration(plainPassword, storedPassword, userId
   const stored = String(storedPassword || "");
   if (!stored) return false;
 
+  const allowLegacySha256 =
+    process.env.ALLOW_LEGACY_SHA256_LOGIN === '1' ||
+    process.env.NODE_ENV !== 'production';
+
   // If already bcrypt, just verify
   if (/^\$2[aby]\$\d{2}\$/.test(stored)) {
     return bcrypt.compare(String(plainPassword || ""), stored);
@@ -239,6 +243,10 @@ async function verifyPasswordWithMigration(plainPassword, storedPassword, userId
 
   // If SHA256, verify and migrate
   if (isSha256Hash(stored)) {
+    if (!allowLegacySha256) {
+      return false;
+    }
+
     const inputHash = sha256Hex(plainPassword);
     const isValid = inputHash === stored.toLowerCase();
 
