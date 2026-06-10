@@ -141,18 +141,18 @@ async function init_r_auction() {
                   <div class="judicial-lot-actions d-flex gap-2 justify-content-xl-end flex-wrap">
                     <button
                       id="btnDownloadAssetTemplate"
-                      class="btn btn-primary lot-btn lot-btn-template"
-                      style="background:#1e40af;border-color:#1e40af;color:#fff;"
+                      type="button"
+                      class="lot-btn lot-btn-template"
                     >Descargar plantilla</button>
                     <button
                       id="btnCreateLot"
-                      class="btn btn-danger lot-btn lot-btn-create"
-                      style="background:#f84300;border-color:#f84300;color:#fff;"
+                      type="button"
+                      class="lot-btn lot-btn-create"
                     >Crear lote</button>
                     <button
                       id="btnRefreshLots"
-                      class="btn btn-secondary lot-btn lot-btn-refresh"
-                      style="background:#334155;border-color:#334155;color:#fff;"
+                      type="button"
+                      class="lot-btn lot-btn-refresh"
                     >Refrescar</button>
                   </div>
                 </div>
