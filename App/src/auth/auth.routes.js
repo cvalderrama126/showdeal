@@ -1,7 +1,9 @@
 const router = require("express").Router();
 const crypto = require("crypto");
+const QRCode = require("qrcode");
 const { z } = require("zod");
 const rateLimit = require("express-rate-limit");
+const { prisma } = require("../db/prisma");
 const { requireAuth, jsonSafe } = require("./auth.middleware");
 const { login, verifyOtp, otpSetup, otpEnable, otpDisable, changePassword, changePasswordForced } = require("./auth.service");
 const { getModulePermissions } = require("../routes/access.guard");
@@ -260,6 +262,45 @@ router.post("/otp/setup/:id_user", requireAuth, csrfProtection, async (req, res,
 
     const result = await otpSetup({ id_user: idUser, issuer: "ShowDeal" });
     return respondWithResult(res, result);
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get("/otp/qrcode", requireAuth, async (req, res, next) => {
+  try {
+    const idUser = req.auth?.sub;
+    let userId;
+    try {
+      userId = BigInt(String(idUser));
+    } catch {
+      return res.status(400).json({ ok: false, error: "INVALID_USER_ID" });
+    }
+
+    const user = await prisma.r_user.findUnique({
+      where: { id_user: userId },
+      select: { additional: true, is_active: true },
+    });
+
+    if (!user || user.is_active !== true) {
+      return res.status(404).json({ ok: false, error: "USER_NOT_FOUND" });
+    }
+
+    const otpauthUrl = user.additional?.otp?.otpauth_url;
+    if (!otpauthUrl || typeof otpauthUrl !== "string") {
+      return res.status(404).json({ ok: false, error: "OTP_SETUP_NOT_FOUND" });
+    }
+
+    const pngBuffer = await QRCode.toBuffer(otpauthUrl, {
+      type: "png",
+      width: 220,
+      margin: 1,
+      errorCorrectionLevel: "M",
+    });
+
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "no-store, max-age=0");
+    return res.send(pngBuffer);
   } catch (err) {
     return next(err);
   }

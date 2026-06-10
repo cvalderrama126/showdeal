@@ -93,41 +93,6 @@ const upload = multer({
         return callback(err);
       }
 
-      // ✅ VALIDATE FILE CONTENT (Magic Bytes) - Only for non-empty files
-      if (file.size > 0 && file.buffer) {
-        const fileTypeFromBuffer = await getFileTypeFromBuffer();
-        const detectedType = await fileTypeFromBuffer(file.buffer);
-        if (!detectedType) {
-          // Unknown file type - reject
-          const err = new Error("FILE_CONTENT_UNRECOGNIZED");
-          err.status = 400;
-          return callback(err);
-        }
-
-        // Verify detected MIME type matches allowed types
-        if (!ALLOWED_MIME_TYPES.has(detectedType.mime)) {
-          const err = new Error("FILE_CONTENT_TYPE_MISMATCH");
-          err.status = 400;
-          err.meta = {
-            detected: detectedType.mime,
-            allowed: Array.from(ALLOWED_MIME_TYPES)
-          };
-          return callback(err);
-        }
-
-        // Additional check: extension should match detected type
-        const expectedExt = getExtensionFromMime(detectedType.mime);
-        if (expectedExt && extension !== expectedExt) {
-          const err = new Error("FILE_EXTENSION_MISMATCH");
-          err.status = 400;
-          err.meta = {
-            expected: expectedExt,
-            provided: extension
-          };
-          return callback(err);
-        }
-      }
-
       callback(null, true);
     } catch (error) {
       const err = new Error("FILE_VALIDATION_ERROR");
@@ -183,6 +148,48 @@ function handleSingleUpload(req, res, next) {
 
     return next(err);
   });
+}
+
+async function validateUploadedFileContent(req, res, next) {
+  try {
+    const file = req.file;
+    if (!file || !file.buffer || file.size <= 0) return next();
+
+    const extension = (file.originalname || "").split('.').pop()?.toLowerCase();
+    const fileTypeFromBuffer = await getFileTypeFromBuffer();
+    const detectedType = await fileTypeFromBuffer(file.buffer);
+
+    if (!detectedType) {
+      const err = new Error("FILE_CONTENT_UNRECOGNIZED");
+      err.status = 400;
+      throw err;
+    }
+
+    if (!ALLOWED_MIME_TYPES.has(detectedType.mime)) {
+      const err = new Error("FILE_CONTENT_TYPE_MISMATCH");
+      err.status = 400;
+      err.meta = {
+        detected: detectedType.mime,
+        allowed: Array.from(ALLOWED_MIME_TYPES),
+      };
+      throw err;
+    }
+
+    const expectedExt = getExtensionFromMime(detectedType.mime);
+    if (expectedExt && extension && extension !== expectedExt) {
+      const err = new Error("FILE_EXTENSION_MISMATCH");
+      err.status = 400;
+      err.meta = {
+        expected: expectedExt,
+        provided: extension,
+      };
+      throw err;
+    }
+
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 }
 
 function contentDispositionFileName(fileName, fallbackName) {
@@ -273,6 +280,7 @@ router.post(
   "/",
   requireModuleAccess("r_attach", "create"),
   handleSingleUpload,
+  validateUploadedFileContent,
   async (req, res, next) => {
     try {
       const data = await createAttachment(req.body || {}, req.file);
@@ -287,6 +295,7 @@ router.put(
   "/:id",
   requireModuleAccess("r_attach", "update"),
   handleSingleUpload,
+  validateUploadedFileContent,
   async (req, res, next) => {
     try {
       const id_attach = toId(req.params.id);

@@ -1,5 +1,6 @@
 (function () {
   const SESSION_KEY = "showdeal_session";
+  const FIRST_LOGIN_OTP_SETUP_KEY = "showdeal_first_login_otp_setup";
 
   function getSession() {
     try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); }
@@ -42,8 +43,7 @@ function paintUser() {
     window.history.replaceState({}, document.title, window.location.pathname);
 
     // Get OTP setup data from session
-    const session = getSession();
-    const otpSetup = session?.otpSetup;
+    const otpSetup = getFirstLoginOtpSetup();
 
     // Show modal
     setTimeout(() => {
@@ -87,9 +87,10 @@ function paintUser() {
     // Set secret value
     document.getElementById("otpSecret").value = otpSetup.secret;
     
-    // Generate QR code image from otpauth_url
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpSetup.otpauth_url)}`;
-    document.getElementById("otpQrCode").src = qrUrl;
+    const qrImg = document.getElementById("otpQrCode");
+    if (qrImg) {
+      qrImg.src = "/auth/otp/qrcode";
+    }
     
     // Store data for validation
     window.currentOtpSetup = {
@@ -118,7 +119,11 @@ function paintUser() {
 
       const resp = await fetch(`/auth/otp/enable/${userId}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": await getCsrfToken(),
+        },
+        credentials: "include",
         body: JSON.stringify({ otp: code }),
       });
 
@@ -175,7 +180,11 @@ function paintUser() {
     try {
       const resp = await fetch("/auth/password/setup-first-login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRF-Token": await getCsrfToken(),
+        },
+        credentials: "include",
         body: JSON.stringify({ newPassword: password }),
       });
 
@@ -191,6 +200,8 @@ function paintUser() {
       const modal = bootstrap.Modal.getInstance(document.getElementById("firstLoginModal"));
       if (modal) modal.hide();
 
+      clearFirstLoginOtpSetup();
+
       alert("✅ ¡Bienvenido a ShowDeal!\n\nTu cuenta está configurada correctamente.");
     } catch (err) {
       alert("Error: " + err.message);
@@ -203,4 +214,30 @@ function paintUser() {
     bindLogout();
     checkFirstLogin();
   });
+
+  function getFirstLoginOtpSetup() {
+    try {
+      return JSON.parse(sessionStorage.getItem(FIRST_LOGIN_OTP_SETUP_KEY) || "null");
+    } catch {
+      return null;
+    }
+  }
+
+  function clearFirstLoginOtpSetup() {
+    sessionStorage.removeItem(FIRST_LOGIN_OTP_SETUP_KEY);
+  }
+
+  async function getCsrfToken() {
+    const response = await fetch("/auth/csrf-token", {
+      method: "GET",
+      credentials: "include",
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.csrfToken) {
+      throw new Error(payload?.error || "CSRF_TOKEN_UNAVAILABLE");
+    }
+
+    return String(payload.csrfToken);
+  }
 })();

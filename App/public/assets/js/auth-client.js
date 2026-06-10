@@ -2,6 +2,7 @@
   const API_BASE = "";
   const SESSION_KEY = "showdeal_session";
   const CHALLENGE_KEY = "showdeal_challenge";
+  const FIRST_LOGIN_OTP_SETUP_KEY = "showdeal_first_login_otp_setup";
 
   function qs(id) { return document.getElementById(id); }
 
@@ -15,9 +16,14 @@
     const session = {
       user: payload.user || null,
       firstLogin: payload.firstLogin === true,
-      otpSetup: payload.otpSetup || null,
       createdAt: Date.now(),
     };
+
+    if (payload.otpSetup) {
+      sessionStorage.setItem(FIRST_LOGIN_OTP_SETUP_KEY, JSON.stringify(payload.otpSetup));
+    } else {
+      sessionStorage.removeItem(FIRST_LOGIN_OTP_SETUP_KEY);
+    }
 
     if (window.SD_API?.setSession) {
       window.SD_API.setSession(session);
@@ -47,6 +53,10 @@
 
   function clearChallenge() {
     sessionStorage.removeItem(CHALLENGE_KEY);
+  }
+
+  function clearFirstLoginOtpSetup() {
+    sessionStorage.removeItem(FIRST_LOGIN_OTP_SETUP_KEY);
   }
 
   function showError(message) {
@@ -189,6 +199,7 @@
     }).catch(() => null).finally(() => {
       clearSession();
       clearChallenge();
+      clearFirstLoginOtpSetup();
       window.location.replace(redirectTo);
     });
   };

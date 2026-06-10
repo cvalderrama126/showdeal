@@ -18,7 +18,7 @@ async function hasAccessConfig(moduleName) {
 }
 
 function allowWhenAccessMissing() {
-  return process.env.AUTHZ_REQUIRE_CONFIG === "false";
+  return false;
 }
 
 async function getActiveModules(moduleNames) {
@@ -175,9 +175,6 @@ function requireModuleAccess(moduleName, action) {
       }
 
       const configured = await hasAccessConfig(moduleName);
-      if (!configured && allowWhenAccessMissing()) {
-        return next();
-      }
       if (!configured) {
         return res.status(403).json({ ok: false, error: "ACCESS_NOT_CONFIGURED", module: moduleName });
       }

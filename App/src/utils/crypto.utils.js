@@ -129,12 +129,7 @@ function decryptAES(encryptedData, key) {
     decrypted += decipher.final('utf8');
     return decrypted;
   } catch (err) {
-    // Backward compatibility for data encrypted with legacy createCipher/createDecipher.
-    const legacy = crypto.createDecipher('aes-256-gcm', String(key || ''));
-    legacy.setAuthTag(authTag);
-    let decrypted = legacy.update(encrypted, 'hex', 'utf8');
-    decrypted += legacy.final('utf8');
-    return decrypted;
+    throw new Error('Failed to decrypt data with authenticated cipher');
   }
 }
 

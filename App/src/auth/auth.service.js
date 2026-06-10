@@ -108,10 +108,7 @@ function normalizeUserRecord(row) {
   const login = row.user || row.user_1 || row.login || null;
   const roleName = row.r_role?.role || row.role || null;
   const roleAdditional = row.r_role?.additional || row.role_additional || null;
-  const isAdmin =
-    roleAdditional?.is_admin === true ||
-    roleAdditional?.admin === true ||
-    /^(root|admin|administrator|superadmin)$/i.test(String(roleName || "").trim());
+  const isAdmin = roleAdditional?.is_admin === true;
 
   return {
     ...row,
@@ -133,6 +130,19 @@ function buildUserPayload(row) {
     id_role: user.id_role,
     isAdmin: user.isAdmin || false,
   };
+}
+
+function getTokenVersion(additional) {
+  const raw = additional?.token_version;
+  const parsed = Number.parseInt(String(raw ?? "0"), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function bumpTokenVersion(additional) {
+  const current = getTokenVersion(additional);
+  return mergeAdditional(additional, {
+    token_version: current + 1,
+  });
 }
 
 async function findUserByLogin(user) {
@@ -367,6 +377,7 @@ async function login({ user, password }) {
     roleId: toJwtSafe(dbUser.id_role),
     roleName: dbUser.roleName,
     isAdmin: dbUser.isAdmin === true,
+    tokenVersion: getTokenVersion(dbUser.additional),
   });
 
   return {
@@ -411,7 +422,7 @@ async function verifyOtp({ challengeToken, otp }) {
 
   const replayKey = buildOtpReplayKey(u.id_user, otp);
   const canUseOtp = await setIfNotExistsWithTTL(replayKey, "1", OTP_REPLAY_TTL_SECONDS);
-  if (canUseOtp === false) {
+  if (canUseOtp !== true) {
     return { ok: false, status: 401, error: "OTP replay detected" };
   }
 
@@ -425,6 +436,7 @@ async function verifyOtp({ challengeToken, otp }) {
     roleName: u.roleName,
     isAdmin: u.isAdmin === true,
     amr: ["pwd", "totp"],
+    tokenVersion: getTokenVersion(u.additional),
   });
 
   return {
@@ -508,9 +520,11 @@ async function otpDisable({ id_user }) {
     },
   });
 
+  const revokedAdditional = bumpTokenVersion(nextAdditional);
+
   await prisma.r_user.update({
     where: { id_user: u.id_user },
-    data: { additional: nextAdditional },
+    data: { additional: revokedAdditional },
   });
 
   return { ok: true, status: 200, data: { enabled: false } };
@@ -534,11 +548,13 @@ async function persistPasswordChange({ user, newPassword }) {
     first_login: false,
   });
 
+  const revokedAdditional = bumpTokenVersion(nextAdditional);
+
   await prisma.r_user.update({
     where: { id_user: user.id_user },
     data: {
       authentication: updatedAuthentication,
-      additional: nextAdditional,
+      additional: revokedAdditional,
     },
   });
 }

@@ -153,14 +153,19 @@ describe('🔐 OWASP Top 10 Security Tests', () => {
 
     test('Should validate file size limits', async () => {
       const largeBuffer = Buffer.alloc(100 * 1024 * 1024); // 100MB
-      
-      const response = await request(app)
-        .post('/api/r_attach')
-        .set('Authorization', 'Bearer token')
-        .field('name', 'large-file')
-        .attach('file', largeBuffer, 'large.bin');
 
-      expect([400, 401, 413]).toContain(response.status);
+      try {
+        const response = await request(app)
+          .post('/api/r_attach')
+          .set('Authorization', 'Bearer token')
+          .field('name', 'large-file')
+          .attach('file', largeBuffer, 'large.bin');
+
+        expect([400, 401, 413]).toContain(response.status);
+      } catch (error) {
+        // Some environments reset large multipart streams at socket level.
+        expect(error?.code).toBe('ECONNRESET');
+      }
     });
   });
 

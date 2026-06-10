@@ -1,8 +1,14 @@
 // src/auth/auth.middleware.js
 const jwt = require("jsonwebtoken");
 const { jsonSafe } = require("../routes/jsonSafe");
+const { prisma } = require("../db/prisma");
 
-function requireAuth(req, res, next) {
+function parseTokenVersion(value) {
+  const parsed = Number.parseInt(String(value ?? "0"), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+async function requireAuth(req, res, next) {
   try {
     const header = req.headers.authorization || "";
     const bearerToken = header.startsWith("Bearer ") ? header.substring(7) : "";
@@ -40,6 +46,29 @@ function requireAuth(req, res, next) {
     // Validate issued at is not in the future
     if (decoded.iat > now + 60) { // Allow 1 minute clock skew
       return res.status(401).json(jsonSafe({ ok: false, error: "Token issued in the future" }));
+    }
+
+    let userId;
+    try {
+      userId = BigInt(String(decoded.sub));
+    } catch {
+      return res.status(401).json(jsonSafe({ ok: false, error: "Invalid token subject" }));
+    }
+
+    const userRow = await prisma.r_user.findUnique({
+      where: { id_user: userId },
+      select: { additional: true, is_active: true },
+    });
+
+    if (!userRow || userRow.is_active !== true) {
+      return res.status(401).json(jsonSafe({ ok: false, error: "User not active" }));
+    }
+
+    const userTokenVersion = parseTokenVersion(userRow.additional?.token_version);
+    const tokenVersion = parseTokenVersion(decoded.tokenVersion);
+
+    if (tokenVersion !== userTokenVersion) {
+      return res.status(401).json(jsonSafe({ ok: false, error: "Token revoked" }));
     }
 
     req.auth = decoded;
