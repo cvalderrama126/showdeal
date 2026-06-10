@@ -3,6 +3,7 @@
 (function (global) {
   const API_BASE = "";
   const SESSION_KEY = "showdeal_session";
+  let csrfTokenCache = "";
 
   function getSession() {
     try {
@@ -25,14 +26,30 @@
   }
 
   function getAuthHeaders(headers = {}) {
-    const nextHeaders = { ...headers };
-    const token = getToken();
-    if (token) nextHeaders.Authorization = `Bearer ${token}`;
-    return nextHeaders;
+    return { ...headers };
+  }
+
+  async function getCsrfToken() {
+    if (csrfTokenCache) return csrfTokenCache;
+
+    const res = await fetch(API_BASE + "/auth/csrf-token", {
+      method: "GET",
+      credentials: "include",
+    });
+
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload?.csrfToken) {
+      throw { status: res.status, ...payload, error: payload?.error || "CSRF_TOKEN_UNAVAILABLE" };
+    }
+
+    csrfTokenCache = String(payload.csrfToken);
+    return csrfTokenCache;
   }
 
   async function request(path, { method = "GET", body = null, headers = {} } = {}) {
     const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+    const normalizedMethod = String(method || "GET").toUpperCase();
+    const needsCsrf = ["POST", "PUT", "PATCH", "DELETE"].includes(normalizedMethod);
     const nextHeaders = getAuthHeaders(headers);
 
     if (!isFormData && body !== null) {
@@ -44,9 +61,14 @@
       }
     }
 
+    if (needsCsrf && path !== "/auth/login" && path !== "/auth/otp/verify") {
+      nextHeaders["X-CSRF-Token"] = await getCsrfToken();
+    }
+
     const res = await fetch(API_BASE + path, {
-      method,
+      method: normalizedMethod,
       headers: nextHeaders,
+      credentials: "include",
       body: body
         ? (isFormData ? body : JSON.stringify(body))
         : null,

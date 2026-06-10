@@ -6,19 +6,19 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-showdeal}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-showdeal_dev_password}
+      POSTGRES_PASSWORD: ${DB_PASSWORD?DB_PASSWORD is required}
       POSTGRES_DB: ${DB_NAME:-showdeal}
       PGDATA: /var/lib/postgresql/data/pgdata
       # Minimal logging for production
       POSTGRES_INITDB_ARGS: "-c log_statement=none"
       # Admin user seed configuration
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@showdeal.com}
-      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-$$2a$$10$$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36P4JlFm}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH?ADMIN_PASSWORD_HASH is required}
       ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Admin User}
       ADMIN_PHONE: ${ADMIN_PHONE:-+1-555-0000}
     
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     
     volumes:
       # Persistencia de datos
@@ -53,7 +53,7 @@ services:
     restart: unless-stopped
     
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     
     volumes:
       - redis_data:/data
@@ -61,7 +61,7 @@ services:
     networks:
       - showdeal-network
     
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_dev_password}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD?REDIS_PASSWORD is required}
     
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -100,17 +100,17 @@ services:
     
     environment:
       # Application
-      NODE_ENV: ${NODE_ENV:-development}
+      NODE_ENV: ${NODE_ENV:-production}
       PORT: 3000
       LOG_LEVEL: ${LOG_LEVEL:-info}
       
       # Database (debe coincidir con postgres service)
-      DATABASE_URL: postgresql://${DB_USER:-showdeal}:${DB_PASSWORD:-showdeal_dev_password}@postgres:5432/${DB_NAME:-showdeal}?schema=showdeal
+      DATABASE_URL: postgresql://${DB_USER:-showdeal}:${DB_PASSWORD?DB_PASSWORD is required}@postgres:5432/${DB_NAME:-showdeal}?schema=showdeal
       
       # JWT
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-key-change-in-production-min-32-chars}
+      JWT_SECRET: ${JWT_SECRET?JWT_SECRET is required}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
-      JWT_CHALLENGE_SECRET: ${JWT_CHALLENGE_SECRET:-dev-challenge-secret-min-32-chars}
+      JWT_CHALLENGE_SECRET: ${JWT_CHALLENGE_SECRET?JWT_CHALLENGE_SECRET is required}
       JWT_CHALLENGE_EXPIRES_IN: ${JWT_CHALLENGE_EXPIRES_IN:-5m}
       
       # File Upload
@@ -118,13 +118,13 @@ services:
       MAX_FILE_SIZE: ${MAX_FILE_SIZE:-10485760}
       
       # Redis (opcional)
-      REDIS_URL: redis://:${REDIS_PASSWORD:-redis_dev_password}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD?REDIS_PASSWORD is required}@redis:6379
       
       # Optional: Monitoring
       # SENTRY_DSN: ${SENTRY_DSN:-}
     
     ports:
-      - "${APP_PORT:-3000}:3000"
+      - "127.0.0.1:${APP_PORT:-3000}:3000"
     
     volumes:
       # Live reload en desarrollo

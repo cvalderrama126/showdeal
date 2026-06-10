@@ -1,13 +1,25 @@
 const express = require('express');
 const { z } = require('zod');
+const rateLimit = require('express-rate-limit');
 const { passwordResetRateLimit } = require('./password-reset.middleware');
 const {
   createPasswordResetToken,
   validatePasswordResetToken,
   resetPasswordWithToken
 } = require('./password-reset.service');
+const { isEmailConfigured, sendPasswordResetEmail } = require('./password-reset-email.service');
 
 const router = express.Router();
+
+const resetTokenActionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many password reset attempts. Please try again later.'
+  }
+});
 
 // Validation schemas
 const requestResetSchema = z.object({
@@ -50,20 +62,23 @@ router.post('/request', passwordResetRateLimit, async (req, res) => {
     const result = await createPasswordResetToken(email, clientIP, userAgent);
 
     if (result.success) {
-      // In a real application, you would send an email here
-      // For now, we'll return the token for testing purposes
-      // TODO: Implement email sending service
+      // Never expose reset tokens in API responses.
+      if (process.env.NODE_ENV === 'production' && !isEmailConfigured()) {
+        return res.status(503).json({
+          error: 'PASSWORD_RESET_UNAVAILABLE',
+          message: 'Password reset is temporarily unavailable.'
+        });
+      }
+
+      if (result.token && isEmailConfigured()) {
+        await sendPasswordResetEmail({ toEmail: email, token: result.token });
+      }
 
       res.json({
-        message: result.message,
-        // Remove this in production - only for testing
-        ...(process.env.NODE_ENV === 'development' && result.token && {
-          resetToken: result.token,
-          note: 'This token is only shown in development mode for testing'
-        })
+        message: result.message
       });
     } else {
-      res.status(400).json({
+      res.status(result.status || 400).json({
         error: result.message
       });
     }
@@ -80,7 +95,7 @@ router.post('/request', passwordResetRateLimit, async (req, res) => {
  * POST /auth/password-reset/validate
  * Validate a password reset token
  */
-router.post('/validate', async (req, res) => {
+router.post('/validate', resetTokenActionLimiter, async (req, res) => {
   try {
     // Validate input
     const validation = validateTokenSchema.safeParse(req.body);
@@ -120,7 +135,7 @@ router.post('/validate', async (req, res) => {
  * POST /auth/password-reset/reset
  * Reset password using a valid token
  */
-router.post('/reset', async (req, res) => {
+router.post('/reset', resetTokenActionLimiter, async (req, res) => {
   try {
     // Validate input
     const validation = resetPasswordSchema.safeParse(req.body);

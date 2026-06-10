@@ -4,6 +4,13 @@ const bcrypt = require("bcryptjs");
 const { authenticator } = require("otplib");
 const { prisma } = require("../db/prisma");
 const { isSha256Hash, bcryptHash } = require("./password-migration.service");
+const { setIfNotExistsWithTTL } = require("../utils/redis.client");
+
+const OTP_REPLAY_TTL_SECONDS = 60;
+
+function buildOtpReplayKey(userId, otp) {
+  return `otp:used:${String(userId)}:${String(otp)}`;
+}
 
 function toJwtSafe(value) {
   if (typeof value === "bigint") return value.toString();
@@ -233,8 +240,7 @@ async function verifyPasswordWithMigration(plainPassword, storedPassword, userId
   if (!stored) return false;
 
   const allowLegacySha256 =
-    process.env.ALLOW_LEGACY_SHA256_LOGIN === '1' ||
-    process.env.NODE_ENV !== 'production';
+    process.env.ALLOW_LEGACY_SHA256_LOGIN === '1';
 
   // If already bcrypt, just verify
   if (/^\$2[aby]\$\d{2}\$/.test(stored)) {
@@ -434,6 +440,12 @@ async function verifyOtp({ challengeToken, otp }) {
 
   const isValid = authenticator.check(String(otp), otpCfg.secret);
   if (!isValid) return { ok: false, status: 401, error: "Invalid OTP" };
+
+  const replayKey = buildOtpReplayKey(u.id_user, otp);
+  const canUseOtp = await setIfNotExistsWithTTL(replayKey, "1", OTP_REPLAY_TTL_SECONDS);
+  if (canUseOtp === false) {
+    return { ok: false, status: 401, error: "OTP replay detected" };
+  }
 
   const firstLogin = u.additional?.first_login === true;
 

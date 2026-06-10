@@ -1,7 +1,7 @@
 const router = require("express").Router();
+const crypto = require("crypto");
 const { z } = require("zod");
 const rateLimit = require("express-rate-limit");
-const csurf = require("csurf");
 const { requireAuth, jsonSafe } = require("./auth.middleware");
 const { login, verifyOtp, otpSetup, otpEnable, otpDisable, changePassword, changePasswordForced } = require("./auth.service");
 const { getModulePermissions } = require("../routes/access.guard");
@@ -32,18 +32,78 @@ const otpLimiter = rateLimit({
   skipSuccessfulRequests: true,
 });
 
+const AUTH_COOKIE_NAME = "sd_auth";
+const CSRF_COOKIE_NAME = "sd_csrf";
+
+function isProduction() {
+  return process.env.NODE_ENV === "production";
+}
+
+function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: isProduction(),
+    sameSite: "strict",
+    path: "/",
+    maxAge: 8 * 60 * 60 * 1000,
+  };
+}
+
+function csrfCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: isProduction(),
+    sameSite: "strict",
+    path: "/",
+    maxAge: 2 * 60 * 60 * 1000,
+  };
+}
+
+function maybeSetSessionCookie(res, result) {
+  if (!result?.ok || !result?.data?.token) return result;
+
+  const token = String(result.data.token);
+  res.cookie(AUTH_COOKIE_NAME, token, sessionCookieOptions());
+
+  if (process.env.EXPOSE_JWT_IN_RESPONSE !== "1") {
+    delete result.data.token;
+  }
+
+  return result;
+}
+
+function requiresCsrfValidation(req) {
+  const method = String(req.method || "").toUpperCase();
+  if (["GET", "HEAD", "OPTIONS"].includes(method)) return false;
+
+  const routePath = String(req.path || "");
+  if (routePath === "/login") return false;
+  if (routePath === "/otp/verify") return false;
+  if (routePath.startsWith("/password-reset/")) return false;
+  if (routePath === "/logout") return false;
+
+  return true;
+}
+
+function csrfProtection(req, res, next) {
+  if (process.env.NODE_ENV === "test") return next();
+  if (!requiresCsrfValidation(req)) return next();
+
+  const csrfCookie = req.cookies?.[CSRF_COOKIE_NAME];
+  const csrfHeader = req.get("x-csrf-token");
+
+  if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+    return res.status(403).json({
+      ok: false,
+      error: "CSRF_TOKEN_INVALID",
+    });
+  }
+
+  return next();
+}
+
 
 // ✅ CSRF PROTECTION (Security: prevent CSRF attacks)
-// Only enable in production - in development, frontend needs token generation
-const csrfProtection = process.env.NODE_ENV === 'production' 
-  ? csurf({
-      cookie: {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'strict'
-      }
-    })
-  : (req, res, next) => next(); // Skip CSRF in development
 // ✅ INPUT VALIDATION SCHEMAS
 const loginSchema = z.object({
   user: z.string().trim().min(1, "Username required").max(100, "Username too long"),
@@ -80,11 +140,13 @@ function respondWithResult(res, result) {
   );
 }
 
+router.use(csrfProtection);
+
 router.post("/login", authLimiter, csrfProtection, async (req, res, next) => {
   try {
     // ✅ VALIDATE INPUT
     const validated = loginSchema.parse(req.body);
-    const result = await login(validated);
+    const result = maybeSetSessionCookie(res, await login(validated));
 
     // Audit: capture login attempt outcome (success / failure / OTP required)
     if (result?.ok && result?.data?.requireOtp) {
@@ -129,7 +191,7 @@ router.post("/otp/verify", otpLimiter, csrfProtection, async (req, res, next) =>
   try {
     // ✅ VALIDATE INPUT
     const validated = otpVerifySchema.parse(req.body);
-    const result = await verifyOtp(validated);
+    const result = maybeSetSessionCookie(res, await verifyOtp(validated));
 
     audit({
       req,
@@ -344,10 +406,19 @@ router.post("/password/setup-first-login", requireAuth, csrfProtection, async (r
 });
 
 router.get("/csrf-token", csrfProtection, (req, res) => {
+  const csrfToken = crypto.randomBytes(32).toString("hex");
+  res.cookie(CSRF_COOKIE_NAME, csrfToken, csrfCookieOptions());
+
   return res.json({
     ok: true,
-    csrfToken: req.csrfToken()
+    csrfToken,
   });
+});
+
+router.post("/logout", (req, res) => {
+  res.clearCookie(AUTH_COOKIE_NAME, { path: "/" });
+  res.clearCookie(CSRF_COOKIE_NAME, { path: "/" });
+  return res.json({ ok: true });
 });
 
 router.get("/me", requireAuth, async (req, res) => {

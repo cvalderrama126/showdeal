@@ -78,7 +78,6 @@ const MAX_ROWS = Number.parseInt(process.env.ASSET_BULK_MAX_ROWS || "5000", 10);
 const ALLOWED_MIME = new Set([
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // xlsx
   "application/vnd.ms-excel",                                          // xls
-  "application/octet-stream", // some browsers send this; we re-check via magic bytes
 ]);
 const ALLOWED_EXT = new Set(["xlsx", "xls"]);
 

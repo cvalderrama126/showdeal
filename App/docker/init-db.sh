@@ -21,8 +21,18 @@ DB_NAME="${POSTGRES_DB:-showdeal}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-admin@showdeal.com}"
 ADMIN_FULL_NAME="${ADMIN_FULL_NAME:-Admin User}"
 ADMIN_PHONE="${ADMIN_PHONE:-+1-555-0000}"
-# bcrypt hash of "password" — CAMBIAR en producción
-ADMIN_PASSWORD_HASH="${ADMIN_PASSWORD_HASH:-\$2a\$10\$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36P4JlFm}"
+# bcrypt hash del admin inicial. Debe venir explícitamente por variable de entorno.
+ADMIN_PASSWORD_HASH="${ADMIN_PASSWORD_HASH:-}"
+
+if [ -z "$ADMIN_PASSWORD_HASH" ]; then
+  echo "[ERROR] ADMIN_PASSWORD_HASH is required. Generate a bcrypt hash and export ADMIN_PASSWORD_HASH before first deploy."
+  exit 1
+fi
+
+if [ "$ADMIN_PASSWORD_HASH" = "\$2a\$10\$N9qo8uLOickgx2ZMRZoMyeIjZAgcg7b3XeKeUxWdeS86E36P4JlFm" ]; then
+  echo "[ERROR] Weak default admin hash detected. Refusing to initialize with known password."
+  exit 1
+fi
 
 echo "=== ShowDeal DB Init ==="
 echo "  DB_USER:     $DB_USER"

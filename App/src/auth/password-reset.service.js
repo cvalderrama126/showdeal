@@ -108,20 +108,28 @@ function buildUpdatedAuthentication(authentication, hashedPassword) {
  * @returns {Promise<boolean>} True if limit exceeded
  */
 async function hasExceededResetLimit(email) {
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  try {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
-  const recentAttempts = await prisma.r_password_reset_token.count({
-    where: {
-      r_user: {
-        user_1: email
-      },
-      ins_at: {
-        gte: oneHourAgo
+    const recentAttempts = await prisma.r_password_reset_token.count({
+      where: {
+        r_user: {
+          user_1: email
+        },
+        ins_at: {
+          gte: oneHourAgo
+        }
       }
-    }
-  });
+    });
 
-  return recentAttempts >= MAX_RESET_ATTEMPTS_PER_HOUR;
+    return recentAttempts >= MAX_RESET_ATTEMPTS_PER_HOUR;
+  } catch (error) {
+    if (error?.code === 'P2021') {
+      // Missing table should not crash auth flows.
+      return false;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -184,9 +192,18 @@ async function createPasswordResetToken(email, ipAddress = null, userAgent = nul
     };
 
   } catch (error) {
+    if (error?.code === 'P2021') {
+      return {
+        success: false,
+        status: 503,
+        message: 'Password reset is temporarily unavailable.'
+      };
+    }
+
     console.error('Error creating password reset token:', error);
     return {
       success: false,
+      status: 500,
       message: 'An error occurred while processing your request.'
     };
   }

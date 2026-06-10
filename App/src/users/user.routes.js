@@ -92,7 +92,7 @@ router.post("/", requireModuleAccess("r_user", "create"), async (req, res, next)
 router.put("/:id", requireModuleAccess("r_user", "update"), requireOwnership("r_user"), async (req, res, next) => {
   try {
     const id = toId(req.params.id);
-    const data = await updateUser(id, req.body || {});
+    const data = await updateUser(id, req.body || {}, { actorIsAdmin: req.auth?.isAdmin === true });
     audit({
       req,
       action: "USER_UPDATE",

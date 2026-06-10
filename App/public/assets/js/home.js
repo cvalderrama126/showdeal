@@ -428,16 +428,27 @@
     return await res.text();
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   function renderPlaceholder(moduleName, err) {
     const host = document.getElementById("appContent");
+    const safeModuleName = escapeHtml(moduleName);
+    const safeError = escapeHtml(String(err?.message || err));
     host.innerHTML = `
       <div class="sd-card p-4">
-        <h4 class="mb-1">${moduleName}</h4>
+        <h4 class="mb-1">${safeModuleName}</h4>
         <div class="sd-muted mb-3">Este modulo todavia no tiene interfaz visual en el proyecto.</div>
         <div class="alert alert-warning mb-0">
           <div class="fw-bold mb-1">Frontend pendiente</div>
-          <div class="small">${String(err?.message || err)}</div>
-          <div class="small mt-2">El backend puede responder en <code>/api/${moduleName}</code>, pero aun no existe una pantalla dedicada.</div>
+          <div class="small">${safeError}</div>
+          <div class="small mt-2">El backend puede responder en <code>/api/${safeModuleName}</code>, pero aun no existe una pantalla dedicada.</div>
         </div>
       </div>
     `;
@@ -445,9 +456,10 @@
 
   function renderNoAccess(moduleName) {
     const host = document.getElementById("appContent");
+    const safeModuleName = escapeHtml(moduleName);
     host.innerHTML = `
       <div class="sd-card p-4">
-        <h4 class="mb-1">${moduleName}</h4>
+        <h4 class="mb-1">${safeModuleName}</h4>
         <div class="alert alert-warning mb-0">
           <div class="fw-bold mb-1">Sin acceso</div>
           <div class="small">Tu usuario no tiene permisos de lectura para este módulo.</div>

@@ -61,13 +61,20 @@ function createApp() {
   
   app.use(cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (mobile apps, curl)
-      if (!origin) return callback(null, true);
+      // Restrict requests without Origin header, except during automated tests.
+      if (!origin) {
+        if (process.env.NODE_ENV === "test") return callback(null, true);
+        const err = new Error("CORS not allowed: missing origin");
+        err.status = 403;
+        return callback(err);
+      }
       
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error(`CORS not allowed: ${origin}`));
+        const err = new Error(`CORS not allowed: ${origin}`);
+        err.status = 403;
+        callback(err);
       }
     },
     credentials: true,
@@ -84,9 +91,23 @@ function createApp() {
   // Frontend estático (después de helmet)
   app.use(express.static(path.join(__dirname, "..", "public")));
 
+  const apiCsrfProtection = (req, res, next) => {
+    const method = String(req.method || "").toUpperCase();
+    const needsCsrf = ["POST", "PUT", "PATCH", "DELETE"].includes(method);
+    if (!needsCsrf || process.env.NODE_ENV === "test") return next();
+
+    const csrfCookie = req.cookies?.sd_csrf;
+    const csrfHeader = req.get("x-csrf-token");
+    if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+      return res.status(403).json({ ok: false, error: "CSRF_TOKEN_INVALID" });
+    }
+
+    return next();
+  };
+
   app.use("/health", healthRouter);
   app.use("/auth", authRouter);
-  app.use("/api", crudRoutes);
+  app.use("/api", apiCsrfProtection, crudRoutes);
 
   // ERROR HANDLER (JSON) - Security Enhanced
   app.use(errorHandler);

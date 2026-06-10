@@ -343,18 +343,19 @@ async function createUser(input) {
   return getUserById(created.id_user);
 }
 
-async function updateUser(id_user, input) {
+async function updateUser(id_user, input, options = {}) {
   const current = await getRawUserById(id_user);
   if (!current) {
     throw toHttpError(404, "USER_NOT_FOUND");
   }
 
+  const actorIsAdmin = options.actorIsAdmin === true;
   const data = parseUserInput(input, { requirePassword: false });
   await ensureUniqueLogin(data.user_1, id_user);
 
   const updateData = {
     id_company: data.id_company,
-    id_role: data.id_role,
+    id_role: actorIsAdmin ? data.id_role : current.id_role,
     uin: data.uin,
     user_1: data.user_1,
     name: data.name,

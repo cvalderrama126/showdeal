@@ -15,10 +15,10 @@ function jsonSafe(value) {
 function requireAuth(req, res, next) {
   try {
     const header = req.headers.authorization || "";
-    if (!header.startsWith("Bearer ")) {
-      return res.status(401).json(jsonSafe({ ok: false, error: "Missing Bearer token" }));
-    }
-    const token = header.substring(7);
+    const bearerToken = header.startsWith("Bearer ") ? header.substring(7) : "";
+    const cookieToken = req.cookies?.sd_auth ? String(req.cookies.sd_auth) : "";
+    const token = bearerToken || cookieToken;
+
     if (!token) return res.status(401).json(jsonSafe({ ok: false, error: "Missing token" }));
 
     const secret = process.env.JWT_SECRET;
