@@ -301,6 +301,67 @@ a:hover{ color: var(--sd-primary-2); }
   border-color: #475569;
 }
 
+.first-login-visual-guide {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.flg-header {
+  margin-bottom: 6px;
+}
+
+.flg-title {
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.flg-subtitle {
+  font-size: 0.86rem;
+  color: #475569;
+}
+
+.flg-step {
+  height: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.flg-step-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #f84300;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 28px;
+  box-shadow: 0 4px 10px rgba(248, 67, 0, 0.25);
+}
+
+.flg-step-title {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 0.93rem;
+  line-height: 1.2;
+}
+
+.flg-step-text {
+  margin-top: 2px;
+  color: #475569;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
 .sd-toplink:hover{
   color: #fff;
 }
