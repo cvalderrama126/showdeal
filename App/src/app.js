@@ -4,6 +4,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
 const cookieParser = require("cookie-parser");
+const swaggerUi = require("swagger-ui-express");
 
 const healthRouter = require("./routes/health");
 const authRouter = require("./auth/auth.routes");
@@ -11,6 +12,7 @@ const crudRoutes = require("./routes/crud.routes");
 const setupRouter = require("./setup/setup.routes");
 const { isSystemConfigured } = require("./setup/setup.service");
 const { errorHandler, notFoundHandler } = require("./routes/error.middleware");
+const { openApiSpec } = require("./docs/openapi");
 
 function createApp() {
   const app = express();
@@ -29,6 +31,9 @@ function createApp() {
           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
           "img-src": ["'self'", "data:", "blob:"],
           "frame-src": ["'self'", "blob:"],
+          // swagger-ui-express injects inline styles/scripts
+          "script-src": ["'self'", "'unsafe-inline'"],
+          "style-src": ["'self'", "'unsafe-inline'"],
         },
       },
     })
@@ -86,6 +91,14 @@ function createApp() {
   
   // ✅ COOKIE PARSER (Required by csurf for CSRF protection)
   app.use(cookieParser());
+
+  // ── API documentation (OpenAPI 3.0 / Swagger UI) ─────────────────────────
+  app.get("/api-docs.json", (req, res) => {
+    res.json(openApiSpec);
+  });
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openApiSpec, {
+    customSiteTitle: "ShowDeal API Docs",
+  }));
 
   app.get("/", async (req, res, next) => {
     try {
