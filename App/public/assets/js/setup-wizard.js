@@ -147,8 +147,18 @@
 
       setStatus('Setup completado. Actualiza DATABASE_URL con el valor entregado y reinicia la app.', 'success');
       if (data?.data?.databaseUrl) {
-        const msg = `\nDATABASE_URL: ${data.data.databaseUrl}`;
+        const dbUrl = data.data.databaseUrl;
+        const msg = `\nDATABASE_URL: ${dbUrl}`;
         statusBox.textContent += msg;
+
+        if (navigator?.clipboard?.writeText) {
+          try {
+            await navigator.clipboard.writeText(dbUrl);
+            statusBox.textContent += '\n(Copiado al portapapeles)';
+          } catch (error) {
+            // Ignore clipboard failures in unsupported contexts.
+          }
+        }
       }
       btnNext.classList.add('d-none');
       btnPrev.disabled = true;

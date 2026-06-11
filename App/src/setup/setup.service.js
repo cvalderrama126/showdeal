@@ -4,10 +4,13 @@ const { Client } = require("pg");
 const { execFile } = require("node:child_process");
 const { promisify } = require("node:util");
 const path = require("node:path");
+const fs = require("node:fs/promises");
 const { prisma } = require("../db/prisma");
 
 const execFileAsync = promisify(execFile);
 const APP_ROOT = path.resolve(__dirname, "..", "..");
+const SETUP_STATE_PATH = path.join(APP_ROOT, ".setup-state.json");
+const LOCAL_ENV_PATH = path.join(APP_ROOT, ".env");
 
 const setupSchema = z.object({
   dbHost: z.string().trim().min(1).max(255).default("postgres"),
@@ -46,8 +49,80 @@ async function isSystemConfigured() {
     const users = await prisma.r_user.count();
     return users > 0;
   } catch {
+    // Continue checking fallback setup state.
+  }
+
+  try {
+    const setupStateRaw = await fs.readFile(SETUP_STATE_PATH, "utf8");
+    const setupState = JSON.parse(setupStateRaw);
+    if (!setupState?.databaseUrl) {
+      return false;
+    }
+
+    const tmpPrisma = new (require("@prisma/client").PrismaClient)({
+      datasources: {
+        db: { url: setupState.databaseUrl },
+      },
+      log: ["error"],
+    });
+
+    try {
+      const users = await tmpPrisma.r_user.count();
+      return users > 0;
+    } finally {
+      await tmpPrisma.$disconnect();
+    }
+  } catch {
     return false;
   }
+}
+
+async function upsertEnvFile(filePath, updates) {
+  let content = "";
+  try {
+    content = await fs.readFile(filePath, "utf8");
+  } catch (err) {
+    if (err.code !== "ENOENT") throw err;
+  }
+
+  const lines = content ? content.split(/\r?\n/) : [];
+  const keys = Object.keys(updates);
+
+  for (const key of keys) {
+    const value = String(updates[key]);
+    const idx = lines.findIndex((line) => line.startsWith(`${key}=`));
+    const nextLine = `${key}=${value}`;
+    if (idx >= 0) {
+      lines[idx] = nextLine;
+    } else {
+      lines.push(nextLine);
+    }
+  }
+
+  const normalized = `${lines.filter((line) => line !== undefined).join("\n").trim()}\n`;
+  await fs.writeFile(filePath, normalized, "utf8");
+}
+
+async function persistSetupState({ databaseUrl, cfg }) {
+  const setupState = {
+    configuredAt: new Date().toISOString(),
+    dbHost: cfg.dbHost,
+    dbPort: cfg.dbPort,
+    dbName: cfg.dbName,
+    dbUser: cfg.appDbUser,
+    databaseUrl,
+  };
+
+  await fs.writeFile(SETUP_STATE_PATH, `${JSON.stringify(setupState, null, 2)}\n`, "utf8");
+
+  await upsertEnvFile(LOCAL_ENV_PATH, {
+    DATABASE_URL: `"${databaseUrl}"`,
+    DB_HOST: cfg.dbHost,
+    DB_PORT: cfg.dbPort,
+    DB_NAME: cfg.dbName,
+    DB_USER: cfg.appDbUser,
+    DB_PASSWORD: cfg.appDbPassword,
+  });
 }
 
 async function createDatabaseInfrastructure(cfg) {
@@ -249,6 +324,7 @@ async function bootstrapInitialSetup(input) {
 
   await applyPrismaSchema(databaseUrl);
   await seedInitialData(databaseUrl, cfg);
+  await persistSetupState({ databaseUrl, cfg });
 
   return {
     ok: true,
@@ -260,6 +336,7 @@ async function bootstrapInitialSetup(input) {
       admin_user: cfg.adminUser,
       company: cfg.companyName,
       databaseUrl,
+      envFileUpdated: ".env",
       requiresAppRestart: true,
     },
   };

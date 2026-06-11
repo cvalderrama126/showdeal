@@ -11,7 +11,7 @@ const path = require('path');
 
 const PORT = process.env.PORT || 3000;
 const HOST = 'localhost';
-const HEALTH_ENDPOINT = '/health';
+const HEALTH_ENDPOINT = '/health/ready';
 
 /**
  * Realiza una llamada HTTP GET al endpoint /health
