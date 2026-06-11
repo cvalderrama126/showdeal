@@ -335,7 +335,8 @@ async function bootstrapInitialSetup(input) {
       dbUser: cfg.appDbUser,
       admin_user: cfg.adminUser,
       company: cfg.companyName,
-      databaseUrl,
+      // NOTE: databaseUrl is intentionally NOT returned. It contains the DB
+      // password and is persisted server-side only (.env / setup state).
       envFileUpdated: ".env",
       requiresAppRestart: true,
     },

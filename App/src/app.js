@@ -13,6 +13,7 @@ const setupRouter = require("./setup/setup.routes");
 const { isSystemConfigured } = require("./setup/setup.service");
 const { errorHandler, notFoundHandler } = require("./routes/error.middleware");
 const { openApiSpec } = require("./docs/openapi");
+const { requireAuth } = require("./auth/auth.middleware");
 
 function createApp() {
   const app = express();
@@ -31,9 +32,8 @@ function createApp() {
           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
           "img-src": ["'self'", "data:", "blob:"],
           "frame-src": ["'self'", "blob:"],
-          // swagger-ui-express injects inline styles/scripts
-          "script-src": ["'self'", "'unsafe-inline'"],
-          "style-src": ["'self'", "'unsafe-inline'"],
+          // Strict script policy: no 'unsafe-inline'. The Swagger UI route
+          // applies its own relaxed CSP locally (see /api-docs below).
         },
       },
     })
@@ -93,12 +93,44 @@ function createApp() {
   app.use(cookieParser());
 
   // ── API documentation (OpenAPI 3.0 / Swagger UI) ─────────────────────────
-  app.get("/api-docs.json", (req, res) => {
-    res.json(openApiSpec);
-  });
-  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(openApiSpec, {
-    customSiteTitle: "ShowDeal API Docs",
-  }));
+  // Disabled by default in production. Enable explicitly with ENABLE_API_DOCS=true,
+  // in which case the docs require an authenticated admin session.
+  const docsEnabled =
+    process.env.NODE_ENV !== "production" ||
+    String(process.env.ENABLE_API_DOCS).toLowerCase() === "true";
+
+  if (docsEnabled) {
+    const docsGuards = [];
+    if (process.env.NODE_ENV === "production") {
+      docsGuards.push(requireAuth, (req, res, next) => {
+        if (req.auth?.isAdmin === true) return next();
+        return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+      });
+    }
+
+    // Swagger UI needs inline scripts/styles; scope that relaxation to this route only.
+    const docsCsp = helmet({
+      contentSecurityPolicy: {
+        directives: {
+          ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          "script-src": ["'self'", "'unsafe-inline'"],
+          "style-src": ["'self'", "'unsafe-inline'"],
+          "img-src": ["'self'", "data:", "blob:"],
+        },
+      },
+    });
+
+    app.get("/api-docs.json", ...docsGuards, (req, res) => {
+      res.json(openApiSpec);
+    });
+    app.use(
+      "/api-docs",
+      ...docsGuards,
+      docsCsp,
+      swaggerUi.serve,
+      swaggerUi.setup(openApiSpec, { customSiteTitle: "ShowDeal API Docs" })
+    );
+  }
 
   app.get("/", async (req, res, next) => {
     try {
