@@ -422,8 +422,11 @@ async function verifyOtp({ challengeToken, otp }) {
 
   const replayKey = buildOtpReplayKey(u.id_user, otp);
   const canUseOtp = await setIfNotExistsWithTTL(replayKey, "1", OTP_REPLAY_TTL_SECONDS);
-  if (canUseOtp !== true) {
+  if (canUseOtp === false) {
     return { ok: false, status: 401, error: "OTP replay detected" };
+  }
+  if (canUseOtp !== true) {
+    return { ok: false, status: 503, error: "MFA service temporarily unavailable" };
   }
 
   const firstLogin = u.additional?.first_login === true;

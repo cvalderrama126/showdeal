@@ -155,7 +155,7 @@ function requireModuleAccess(moduleName, action) {
 
       const rawRoleId = req.auth?.roleId;
       const roleId = toBigIntOrNull(rawRoleId);
-      if (!roleId) {
+      if (roleId === null) {
         return res.status(403).json({ ok: false, error: "MISSING_ROLE" });
       }
 

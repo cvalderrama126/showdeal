@@ -612,6 +612,7 @@ router.post(
 router.post(
   "/r_auction/:id_auction/bid",
   requireAuth,
+  requireModuleAccess("r_bid", "create"),
   async (req, res, next) => {
     try {
       const idAuction = toBigIntId(req.params.id_auction);

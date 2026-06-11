@@ -34,7 +34,7 @@ function paintUser() {
     });
   }
 
-  function checkFirstLogin() {
+  async function checkFirstLogin() {
     const params = new URLSearchParams(window.location.search);
     const firstLogin = params.get("first_login") === "1";
     if (!firstLogin) return;
@@ -42,8 +42,14 @@ function paintUser() {
     // Remove query param from URL
     window.history.replaceState({}, document.title, window.location.pathname);
 
-    // Get OTP setup data from session
-    const otpSetup = getFirstLoginOtpSetup();
+    // Get OTP setup data from session, or regenerate from backend if missing.
+    let otpSetup = getFirstLoginOtpSetup();
+    if (!otpSetup?.secret || !otpSetup?.otpauth_url) {
+      otpSetup = await fetchFirstLoginOtpSetup().catch(() => null);
+      if (otpSetup?.secret && otpSetup?.otpauth_url) {
+        setFirstLoginOtpSetup(otpSetup);
+      }
+    }
 
     // Show modal
     setTimeout(() => {
@@ -225,6 +231,42 @@ function paintUser() {
 
   function clearFirstLoginOtpSetup() {
     sessionStorage.removeItem(FIRST_LOGIN_OTP_SETUP_KEY);
+  }
+
+  function setFirstLoginOtpSetup(payload) {
+    try {
+      sessionStorage.setItem(FIRST_LOGIN_OTP_SETUP_KEY, JSON.stringify(payload || null));
+    } catch {
+      // Ignore storage write errors in restricted browser contexts.
+    }
+  }
+
+  async function fetchFirstLoginOtpSetup() {
+    const userId = getSession()?.user?.id_user;
+    if (!userId) return null;
+
+    const response = await fetch(`/auth/otp/setup/${userId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRF-Token": await getCsrfToken(),
+      },
+      credentials: "include",
+      body: "{}",
+    });
+
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload?.ok !== true) return null;
+
+    const data = payload || {};
+    if (!data?.secret || !data?.otpauth_url) return null;
+
+    return {
+      secret: String(data.secret),
+      otpauth_url: String(data.otpauth_url),
+      issuer: data.issuer,
+      label: data.label,
+    };
   }
 
   async function getCsrfToken() {

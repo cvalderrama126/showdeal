@@ -8,6 +8,8 @@ const cookieParser = require("cookie-parser");
 const healthRouter = require("./routes/health");
 const authRouter = require("./auth/auth.routes");
 const crudRoutes = require("./routes/crud.routes");
+const setupRouter = require("./setup/setup.routes");
+const { isSystemConfigured } = require("./setup/setup.service");
 const { errorHandler, notFoundHandler } = require("./routes/error.middleware");
 
 function createApp() {
@@ -61,12 +63,9 @@ function createApp() {
   
   app.use(cors({
     origin: (origin, callback) => {
-      // Restrict requests without Origin header, except during automated tests.
+      // Allow requests without Origin header (same-site navigation, server-to-server clients).
       if (!origin) {
-        if (process.env.NODE_ENV === "test") return callback(null, true);
-        const err = new Error("CORS not allowed: missing origin");
-        err.status = 403;
-        return callback(err);
+        return callback(null, true);
       }
       
       if (allowedOrigins.includes(origin)) {
@@ -88,6 +87,16 @@ function createApp() {
   // ✅ COOKIE PARSER (Required by csurf for CSRF protection)
   app.use(cookieParser());
 
+  app.get("/", async (req, res, next) => {
+    try {
+      const configured = await isSystemConfigured();
+      const page = configured ? "index.html" : "setup.html";
+      return res.sendFile(path.join(__dirname, "..", "public", page));
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   // Frontend estático (después de helmet)
   app.use(express.static(path.join(__dirname, "..", "public")));
 
@@ -106,6 +115,7 @@ function createApp() {
   };
 
   app.use("/health", healthRouter);
+  app.use("/setup-api", setupRouter);
   app.use("/auth", authRouter);
   app.use("/api", apiCsrfProtection, crudRoutes);
 

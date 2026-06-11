@@ -19,14 +19,15 @@ param(
     [switch]$Help
 )
 
-$AppPath = Split-Path -Parent $PSScriptRoot
-$AppDir = Join-Path $AppPath "App"
+$RepoRoot = $PSScriptRoot
+$AppDir = Join-Path $RepoRoot "App"
+$UseDockerComposePlugin = $false
 
-# Colores
-$Green = 32
-$Red = 31
-$Yellow = 33
-$Cyan = 36
+# Colores (ConsoleColor names for PowerShell compatibility)
+$Green = "Green"
+$Red = "Red"
+$Yellow = "Yellow"
+$Cyan = "Cyan"
 
 function Write-Color {
     param($Message, $Color = $Cyan)
@@ -34,91 +35,84 @@ function Write-Color {
 }
 
 function Show-Help {
-    Write-Color "
-╔════════════════════════════════════════════════════════════════╗
-║       ShowDeal Docker - Quick Start Helper                    ║
-╚════════════════════════════════════════════════════════════════╝
+        $help = @'
+===============================================================
+    ShowDeal Docker - Quick Start Helper
+===============================================================
 
 USAGE:
-  .\docker-dev.ps1 [command] [flags]
+    ./docker-dev.ps1 [command] [flags]
 
 COMMANDS:
-  up              Levantar servicios (default)
-  down            Detener servicios
-  logs            Ver logs (app + db + redis)
-  shell           Entrar a shell de app
-  db              Conectar a PostgreSQL
-  clean           Limpiar todo (borra volúmenes)
-  build           Build imagen Docker
-  
+    up              Levantar servicios (default)
+    down            Detener servicios
+    logs            Ver logs (app + db + redis)
+    wizard          Asistente interactivo para configurar DB/admin
+    shell           Entrar a shell de app
+    db              Conectar a PostgreSQL
+    clean           Limpiar todo (borra volumenes)
+    build           Build imagen Docker
+
 FLAGS:
-  -Build          Rebuild imagen antes de levantar
-  -Logs_App       Ver solo logs de app
-  -Logs_Db        Ver solo logs de postgres
-  -Logs_Redis     Ver solo logs de redis
-  -h, -Help       Mostrar esta ayuda
+    -Build          Rebuild imagen antes de levantar
+    -Logs_App       Ver solo logs de app
+    -Logs_Db        Ver solo logs de postgres
+    -Logs_Redis     Ver solo logs de redis
+    -h, -Help       Mostrar esta ayuda
 
 EXAMPLES:
-  # Levantar servicios
-  .\docker-dev.ps1 up
-  
-  # Levantar con rebuild
-  .\docker-dev.ps1 up -Build
-  
-  # Ver logs de app
-  .\docker-dev.ps1 logs -Logs_App
-  
-  # Entrar a shell
-  .\docker-dev.ps1 shell
-  
-  # Conectar a BD
-  .\docker-dev.ps1 db
-  
-  # Limpiar todo
-  .\docker-dev.ps1 clean
+    ./docker-dev.ps1 up
+    ./docker-dev.ps1 up -Build
+    ./docker-dev.ps1 logs -Logs_App
+    ./docker-dev.ps1 shell
+    ./docker-dev.ps1 db
+    ./docker-dev.ps1 wizard
 
 STATUS CHECKS:
-  Health:    curl http://localhost:3000/health
-  Frontend:  http://localhost:3000
-  Prisma:    docker-compose exec app npx prisma studio
-  
+    Health:    curl http://localhost:3000/health
+    Frontend:  http://localhost:3000
+    Prisma:    docker compose exec app npx prisma studio
+
 COMMON TASKS:
-  Check services:
-    docker-compose ps
-  
-  Rebuild image:
-    docker-compose up -d --build
-  
-  Reset database:
-    docker-compose down -v
-    docker-compose up -d
-  
-  View DB:
-    docker-compose exec app npx prisma studio
-    # http://localhost:5555
-    
-  Enter app container:
-    docker-compose exec app sh
-    
+    docker compose ps
+    docker compose up -d --build
+    docker compose down -v
+    docker compose exec app sh
+
 For more info, see DOCKER.md
-    " -Color $Cyan
+'@
+
+        Write-Color $help -Color $Cyan
+}
+
+function Invoke-Compose {
+    param(
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$ComposeArgs
+    )
+
+    if ($UseDockerComposePlugin) {
+        & docker compose @ComposeArgs
+    } else {
+        & docker-compose @ComposeArgs
+    }
 }
 
 function Start-Stack {
-    Write-Color "🚀 Starting ShowDeal stack..." -Color $Cyan
+    Write-Color "Starting ShowDeal stack..." -Color $Cyan
     
     if ($Build) {
-        Write-Color "📦 Building image..." -Color $Yellow
-        docker-compose -f $AppDir/docker-compose.yml build
+        Write-Color "Building image..." -Color $Yellow
+        Invoke-Compose -ComposeArgs @("-f", "$AppDir/docker-compose.yml", "build")
     }
     
     Push-Location $AppDir
-    docker-compose up -d
+    Invoke-Compose -ComposeArgs @("up", "-d")
     Pop-Location
     
-    Write-Color "✅ Services started!" -Color $Green
+    Write-Color "Services started!" -Color $Green
     Write-Color "
-📍 Endpoints:
+Endpoints:
    Frontend:     http://localhost:3000
    Health:       http://localhost:3000/health
    API:          http://localhost:3000
@@ -126,71 +120,82 @@ function Start-Stack {
    Redis:        localhost:6379
     " -Color $Green
     
-    Write-Color "⏳ Waiting for services to be ready (30-40s)..." -Color $Yellow
+    Write-Color "Waiting for services to be ready (30-40s)..." -Color $Yellow
     Start-Sleep -Seconds 5
-    docker-compose ps
+    Invoke-Compose -ComposeArgs @("ps")
 }
 
 function Stop-Stack {
-    Write-Color "🛑 Stopping services..." -Color $Yellow
+    Write-Color "Stopping services..." -Color $Yellow
     Push-Location $AppDir
-    docker-compose down
+    Invoke-Compose -ComposeArgs @("down")
     Pop-Location
-    Write-Color "✅ Stopped!" -Color $Green
+    Write-Color "Stopped!" -Color $Green
 }
 
 function Show-Logs {
-    Write-Color "📋 Showing logs..." -Color $Cyan
+    Write-Color "Showing logs..." -Color $Cyan
     Push-Location $AppDir
     
     if ($Logs_App) {
-        docker-compose logs -f app
+        Invoke-Compose -ComposeArgs @("logs", "-f", "app")
     } elseif ($Logs_Db) {
-        docker-compose logs -f postgres
+        Invoke-Compose -ComposeArgs @("logs", "-f", "postgres")
     } elseif ($Logs_Redis) {
-        docker-compose logs -f redis
+        Invoke-Compose -ComposeArgs @("logs", "-f", "redis")
     } else {
-        docker-compose logs -f
+        Invoke-Compose -ComposeArgs @("logs", "-f")
     }
     
     Pop-Location
 }
 
 function Enter-Shell {
-    Write-Color "📦 Entering app container shell..." -Color $Cyan
+    Write-Color "Entering app container shell..." -Color $Cyan
     Push-Location $AppDir
-    docker-compose exec app sh
+    Invoke-Compose -ComposeArgs @("exec", "app", "sh")
     Pop-Location
 }
 
 function Connect-Database {
-    Write-Color "🗄️ Connecting to PostgreSQL..." -Color $Cyan
+    Write-Color "Connecting to PostgreSQL..." -Color $Cyan
     Push-Location $AppDir
-    docker-compose exec postgres psql -U showdeal -d showdeal
+    Invoke-Compose -ComposeArgs @("exec", "postgres", "psql", "-U", "showdeal", "-d", "showdeal")
     Pop-Location
 }
 
 function Clean-All {
-    Write-Color "🧹 Cleaning all data (DESTRUCTIVE)..." -Color $Red
+    Write-Color "Cleaning all data (DESTRUCTIVE)..." -Color $Red
     $confirm = Read-Host "Are you sure? (y/N)"
     
     if ($confirm -eq "y" -or $confirm -eq "yes") {
         Write-Color "Removing containers and volumes..." -Color $Yellow
         Push-Location $AppDir
-        docker-compose down -v
+        Invoke-Compose -ComposeArgs @("down", "-v")
         Pop-Location
-        Write-Color "✅ Cleaned!" -Color $Green
+        Write-Color "Cleaned!" -Color $Green
     } else {
         Write-Color "Cancelled" -Color $Yellow
     }
 }
 
 function Build-Image {
-    Write-Color "🏗️ Building Docker image..." -Color $Cyan
+    Write-Color "Building Docker image..." -Color $Cyan
     Push-Location $AppDir
-    docker-compose build
+    Invoke-Compose -ComposeArgs @("build")
     Pop-Location
-    Write-Color "✅ Build complete!" -Color $Green
+    Write-Color "Build complete!" -Color $Green
+}
+
+function Start-Wizard {
+    $WizardPath = Join-Path $PSScriptRoot "docker-wizard.ps1"
+    if (-not (Test-Path $WizardPath)) {
+        Write-Color "Wizard not found: $WizardPath" -Color $Red
+        exit 1
+    }
+
+    Write-Color "Starting setup wizard..." -Color $Cyan
+    & $WizardPath
 }
 
 # Main logic
@@ -199,14 +204,31 @@ if ($Help) {
     exit 0
 }
 
-# Verificar que docker-compose existe
-if (-not (Get-Command docker-compose -ErrorAction SilentlyContinue)) {
-    Write-Color "❌ docker-compose not found! Please install Docker Desktop" -Color $Red
+# Verificar disponibilidad de Docker Compose (plugin o comando clasico)
+$composeRequired = @("up", "down", "logs", "shell", "db", "clean", "build") -contains $Command.ToLower()
+
+$hasPlugin = $false
+if (Get-Command docker -ErrorAction SilentlyContinue) {
+    try {
+        & docker compose version | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $hasPlugin = $true
+        }
+    } catch {
+    }
+}
+
+$hasStandalone = $null -ne (Get-Command docker-compose -ErrorAction SilentlyContinue)
+
+if ($composeRequired -and -not $hasPlugin -and -not $hasStandalone) {
+    Write-Color "Docker Compose no disponible. Instala Docker Desktop o docker compose plugin." -Color $Red
     exit 1
 }
 
+$UseDockerComposePlugin = $hasPlugin
+
 if (-not (Test-Path $AppDir)) {
-    Write-Color "❌ App directory not found: $AppDir" -Color $Red
+    Write-Color "App directory not found: $AppDir" -Color $Red
     exit 1
 }
 
@@ -232,6 +254,9 @@ switch ($Command.ToLower()) {
     }
     "build" {
         Build-Image
+    }
+    "wizard" {
+        Start-Wizard
     }
     default {
         Show-Help

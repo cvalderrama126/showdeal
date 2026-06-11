@@ -11,7 +11,11 @@ BigInt.prototype.toJSON = function () {
 
 async function main() {
   // Ensure module catalog exists so r_access can grant permissions by role/module.
-  await ensureCoreModules();
+  try {
+    await ensureCoreModules();
+  } catch (err) {
+    console.warn("[showdeal-api] core modules skipped until DB setup:", err.message);
+  }
 
   const app = createApp();
 

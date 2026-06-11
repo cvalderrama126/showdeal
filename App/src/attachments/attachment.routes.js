@@ -12,6 +12,7 @@ const router = require("express").Router();
 const { requireAuth } = require("../auth/auth.middleware");
 const { jsonSafe } = require("../routes/jsonSafe");
 const { requireModuleAccess } = require("../routes/access.guard");
+const { requireOwnership } = require("../routes/ownership.middleware");
 const {
   createAttachment,
   deleteAttachment,
@@ -229,7 +230,7 @@ router.get("/", requireModuleAccess("r_attach", "read"), async (req, res, next) 
   }
 });
 
-router.get("/:id/download", requireModuleAccess("r_attach", "read"), async (req, res, next) => {
+router.get("/:id/download", requireModuleAccess("r_attach", "read"), requireOwnership("r_attach"), async (req, res, next) => {
   try {
     const id_attach = toId(req.params.id);
     const includeInactive = req.query.includeInactive === "true";
@@ -260,7 +261,7 @@ router.get("/:id/download", requireModuleAccess("r_attach", "read"), async (req,
   }
 });
 
-router.get("/:id", requireModuleAccess("r_attach", "read"), async (req, res, next) => {
+router.get("/:id", requireModuleAccess("r_attach", "read"), requireOwnership("r_attach"), async (req, res, next) => {
   try {
     const id_attach = toId(req.params.id);
     const includeInactive = req.query.includeInactive === "true";
@@ -294,6 +295,7 @@ router.post(
 router.put(
   "/:id",
   requireModuleAccess("r_attach", "update"),
+  requireOwnership("r_attach"),
   handleSingleUpload,
   validateUploadedFileContent,
   async (req, res, next) => {
@@ -307,7 +309,7 @@ router.put(
   }
 );
 
-router.delete("/:id", requireModuleAccess("r_attach", "delete"), async (req, res, next) => {
+router.delete("/:id", requireModuleAccess("r_attach", "delete"), requireOwnership("r_attach"), async (req, res, next) => {
   try {
     const id_attach = toId(req.params.id);
     const data = await deleteAttachment(id_attach);

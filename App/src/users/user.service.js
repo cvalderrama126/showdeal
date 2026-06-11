@@ -329,7 +329,7 @@ async function updateUser(id_user, input, options = {}) {
   await ensureUniqueLogin(data.user_1, id_user);
 
   const updateData = {
-    id_company: data.id_company,
+    id_company: actorIsAdmin ? data.id_company : current.id_company,
     id_role: actorIsAdmin ? data.id_role : current.id_role,
     uin: data.uin,
     user_1: data.user_1,

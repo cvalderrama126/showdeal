@@ -4,6 +4,7 @@
 
 ## Índice
 
+0. [Wizard Rápido (Recomendado)](#0-wizard-rápido-recomendado)
 1. [Requisitos Previos](#1-requisitos-previos)
 2. [Estructura de Archivos](#2-estructura-de-archivos)
 3. [Configuración de Variables de Entorno](#3-configuración-de-variables-de-entorno)
@@ -14,6 +15,31 @@
 8. [Reiniciar desde Cero](#8-reiniciar-desde-cero)
 9. [Solución de Problemas](#9-solución-de-problemas)
 10. [Referencia de Variables](#10-referencia-de-variables)
+
+---
+
+## 0. Wizard Rápido (Recomendado)
+
+Si desea configurar todo en modo asistido, use el wizard interactivo:
+
+```powershell
+cd showDeal
+.\docker-dev.ps1 wizard
+```
+
+El wizard solicita:
+
+1. Usuario y clave de PostgreSQL (`DB_USER`, `DB_PASSWORD`)
+2. Datos del admin inicial (`ADMIN_EMAIL`, `ADMIN_FULL_NAME`, `ADMIN_PHONE`)
+3. Contraseña del admin (la convierte a bcrypt hash automáticamente cuando es posible)
+4. Confirmación para levantar Docker al finalizar
+
+También puede ejecutarlo directamente:
+
+```powershell
+cd showDeal
+powershell -ExecutionPolicy Bypass -File .\docker-wizard.ps1
+```
 
 ---
 
