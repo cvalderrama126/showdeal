@@ -129,7 +129,7 @@ function decryptAES(encryptedData, key) {
     decrypted += decipher.final('utf8');
     return decrypted;
   } catch (err) {
-    throw new Error('Failed to decrypt data with authenticated cipher');
+    throw new Error('Failed to decrypt data with authenticated cipher', { cause: err });
   }
 }
 

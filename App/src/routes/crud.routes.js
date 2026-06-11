@@ -333,7 +333,7 @@ router.post(
       const eventSuffix = idEvent ? `_evento_${idEvent}` : "";
       const fileName = `plantilla_ronda1${eventSuffix}.xlsx`;
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      res.setHeader("Content-Disposition", `attachment; filename=\"${fileName}\"`);
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
       await workbook.xlsx.write(res);
       res.end();
     } catch (err) {

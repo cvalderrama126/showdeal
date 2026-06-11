@@ -13,7 +13,7 @@ router.get("/", async (req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1 as ok`;
     res.json({ ...base, db: "ok", mode: "liveness" });
-  } catch (err) {
+  } catch (_err) {
     res.json({
       ...base,
       healthy: false,
@@ -37,7 +37,7 @@ router.get("/ready", async (req, res) => {
       db: "ok",
       time: new Date().toISOString(),
     });
-  } catch (err) {
+  } catch (_err) {
     return res.status(503).json({
       ok: false,
       healthy: false,

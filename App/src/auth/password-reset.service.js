@@ -253,7 +253,7 @@ async function validatePasswordResetToken(token) {
       });
 
       for (const candidate of legacyCandidates) {
-        // eslint-disable-next-line no-await-in-loop
+         
         const matched = await verifyResetToken(token, candidate.token_hash);
         if (matched) {
           resetToken = candidate;

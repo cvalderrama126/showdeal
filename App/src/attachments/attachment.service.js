@@ -64,7 +64,7 @@ function sanitizeFileName(filename) {
   // Remove path traversal sequences
   let sanitized = filename
     .replace(/\.\./g, '') // Remove ..
-    .replace(/[\/\\]/g, '') // Remove / and \
+    .replace(/[/\\]/g, '') // Remove / and \
     .replace(/[<>:*?"|]/g, '') // Remove invalid characters
     .trim();
 

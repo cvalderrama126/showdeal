@@ -68,7 +68,7 @@ function sanitizeError(error) {
  * @param {Object} res - Express response
  * @param {Function} next - Express next function
  */
-function errorHandler(err, req, res, next) {
+function errorHandler(err, req, res, _next) {
   // Log the full error for server-side debugging
   console.error('Error occurred:', {
     message: err.message,

@@ -134,7 +134,7 @@ async function audit({
     });
   } catch (err) {
     // Never break the caller because of audit failures.
-    // eslint-disable-next-line no-console
+     
     console.error("[audit] failed to persist log:", err?.message || err);
   }
 }

@@ -341,7 +341,7 @@ function buildListWhere(model, { hasIsActive, query }) {
       }
 
       where[field.name] = coerceFieldValue(field, rawValue);
-    } catch (err) {
+    } catch (_err) {
       throw createHttpError(400, "INVALID_FILTER_VALUE", {
         field: field.name,
         type: field.type,

@@ -21,7 +21,7 @@ async function getUserCompany(userId) {
  * Middleware to check ownership of resources
  * Prevents IDOR (Insecure Direct Object Reference) attacks
  */
-function requireOwnership(model, ownershipField) {
+function requireOwnership(model, _ownershipField) {
   return async (req, res, next) => {
     try {
       // Admins bypass ownership checks

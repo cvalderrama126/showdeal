@@ -1,7 +1,7 @@
 const bcrypt = require("bcryptjs");
 const { z } = require("zod");
 const { prisma } = require("../db/prisma");
-const { parseYmdDate, getLatestCredential } = require("../utils/common");
+const { getLatestCredential } = require("../utils/common");
 
 function todayUtcYmdString() {
   const now = new Date();

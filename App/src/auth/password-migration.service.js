@@ -232,7 +232,7 @@ async function getMigrationStats() {
       }
     });
 
-    let totalUsers = users.length;
+    const totalUsers = users.length;
     let sha256Users = 0;
     let bcryptUsers = 0;
     let needsMigration = 0;

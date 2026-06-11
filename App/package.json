@@ -15,6 +15,8 @@
     "access:fill-profiles": "node scripts/fill-access-by-profile.js",
     "prisma:pull": "prisma db pull",
     "prisma:generate": "prisma generate",
+    "lint": "eslint src/ --max-warnings 0",
+    "lint:fix": "eslint src/ --fix",
     "test": "jest --coverage --passWithNoTests",
     "test:unit": "jest tests/unit --coverage",
     "test:api": "jest tests/api.functional.test.js --coverage",
@@ -55,7 +57,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "artillery": "^2.0.30",
+    "eslint": "^10.4.1",
+    "globals": "^17.6.0",
     "jest": "^30.3.0",
     "lighthouse": "^12.8.2",
     "nodemon": "^3.1.4",
