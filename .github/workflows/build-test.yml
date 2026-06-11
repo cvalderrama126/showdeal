@@ -39,7 +39,7 @@ jobs:
         run: npm ci
       
       - name: Run ESLint (si está configurado)
-        run: npm run lint 2>/dev/null || echo "⚠️ ESLint no configurado"
+        run: npm run lint 2>/dev/null || echo "ESLint not configured - skipping"
       
       - name: Check for security vulnerabilities
         run: npm audit --audit-level=high || true
@@ -139,15 +139,16 @@ jobs:
           npm run prisma:generate
           npx prisma db push --skip-generate 2>/dev/null || echo "DB setup done"
       
-      - name: Run tests (si están configurados)
+      - name: Run tests
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db?schema=public
-        run: npm test 2>/dev/null || echo "⚠️ Tests no configurados"
+          MOCK_PRISMA: "1"
+        run: npm test
       
       - name: Run module database tests
         env:
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db?schema=public
-        run: npm run test:modules 2>/dev/null || echo "⚠️ Module tests no configurados"
+        run: npm run test:modules 2>/dev/null || echo "Module tests not configured - skipping"
 
   # ============================================
   # 4. SECURITY SCANNING
@@ -159,7 +160,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: 'fs'
           scan-ref: './App'
@@ -167,7 +168,8 @@ jobs:
           output: 'trivy-results.sarif'
       
       - name: Upload Trivy results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v2
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
         with:
           sarif_file: 'trivy-results.sarif'
 
@@ -181,8 +183,8 @@ jobs:
     
     steps:
       - name: Send Slack notification (success)
-        if: secrets.SLACK_WEBHOOK_URL
-        uses: slackapi/slack-github-action@v1
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        uses: slackapi/slack-github-action@v2
         with:
           webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           payload: |
