@@ -37,14 +37,14 @@ module.exports = {
 
   coverageThreshold: {
     // ─── Global baseline ────────────────────────────────────────────────────
-    // Measured June 2026: stmts ~19%, branch ~9%, fns ~10%, lines ~20%.
+    // Measured June 2026: stmts ~22%, branch ~13%, fns ~16%, lines ~23%.
     // These floors prevent regression without blocking CI.
     // Target milestones: 25 % → 35 % → 50 %.
     global: {
-      branches: 8,
-      functions: 8,
-      lines: 18,
-      statements: 17,
+      branches: 10,
+      functions: 13,
+      lines: 20,
+      statements: 19,
     },
     // ─── Critical-path files (keep these high) ───────────────────────────
     './src/routes/health.js': {
