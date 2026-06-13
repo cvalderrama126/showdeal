@@ -65,9 +65,9 @@ Las credenciales sensibles están hardcodeadas en el archivo `.env` que probable
 
 #### 🚨 Código Vulnerable
 ```env
-DATABASE_URL="postgresql://showdeal:b5hpgVj@localhost:5432/showdeal?schema=showdeal"
-JWT_SECRET="WA4Xo4x6Y0o0m1pxP3i392OukiE91rgwB8g"
-JWT_CHALLENGE_SECRET="JBSWY3DPEHPK3PXP"
+DATABASE_URL="postgresql://showdeal:<redacted-historic-password>@localhost:5432/showdeal?schema=showdeal"
+JWT_SECRET="<redacted-historic-secret>"
+JWT_CHALLENGE_SECRET="<redacted-historic-secret>"
 ```
 
 #### 💥 Impacto

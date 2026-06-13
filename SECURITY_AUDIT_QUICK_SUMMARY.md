@@ -20,8 +20,8 @@
 ### 1️⃣ SECRETS HARDCODEADOS EN .env
 
 ```env
-DATABASE_URL="postgresql://showdeal:b5hpgVj@..."  # ❌ EXPUESTO
-JWT_SECRET="WA4Xo4x6Y0o0m1pxP3i392OukiE91rgwB8g"  # ❌ DÉBIL
+DATABASE_URL="postgresql://showdeal:<redacted-historic-password>@..."  # ❌ EXPUESTO
+JWT_SECRET="<redacted-historic-secret>"  # ❌ DÉBIL
 ```
 
 **Impacto:** Cualquiera con acceso a Git puede:
