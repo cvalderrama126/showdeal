@@ -4,6 +4,9 @@ logs/
 
 # Node / build artifacts (defensive — App/ has its own .gitignore)
 node_modules/
+# App/node_modules is intentionally vendored & committed for offline installs.
+!/App/node_modules/
+!/App/node_modules/**
 dist/
 build/
 

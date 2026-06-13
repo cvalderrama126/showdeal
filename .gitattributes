@@ -1,0 +1,5 @@
+# Keep vendored dependencies byte-exact across platforms.
+# Disable end-of-line normalization so committed node_modules files are not
+# rewritten on checkout (which could corrupt scripts/binaries).
+App/node_modules/** -text
+App/node_modules/** -diff
