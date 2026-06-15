@@ -2,7 +2,7 @@
 
 **Fecha:** 2026‑04‑20
 **Alcance:** (1) Verificación funcional de todos los módulos de ShowDeal y (2) detección y aislamiento de archivos duplicados / basura en el repositorio.
-**Cambios de código de aplicación:** Ninguno. Sólo se movieron archivos huérfanos a `_aislados/`.
+**Cambios de código de aplicación:** Ninguno. Sólo se retiraron archivos huérfanos/obsoletos ya verificados como no usados.
 
 ---
 
@@ -16,7 +16,7 @@
 | Smoke `npm run test:modules` – API `/api/*`           | ⛔ FAIL **por entorno** (no hay PostgreSQL en el sandbox) |
 | Suite Jest (`npm test`, `:api`, `:security`, `:validation`) | 🟥 **REGRESIÓN REAL P0** – `file-type@22` (ESM) rompe la carga de `src/app.js` en Jest |
 | `npm run qa:modules`, `:full`, `:buyer`               | ⏭️ No ejecutables sin BD + credenciales `QA_BEARER_TOKEN`/`QA_TOTP_SECRET` |
-| Limpieza de archivos basura/duplicados                | ✅ 10 archivos aislados en `_aislados/` con README justificativo |
+| Limpieza de archivos basura/duplicados                | ✅ 10 archivos innecesarios eliminados definitivamente |
 | Integridad post‑limpieza                              | ✅ `node --check src/server.js` y `src/app.js` OK; ninguna referencia rota en `App/`, `.github/`, `Dockerfile` ni `docker-compose.yml` |
 
 ---
@@ -83,10 +83,10 @@ Wiring: `App/src/routes/crud.routes.js`.
 
 ---
 
-## 4. Limpieza de archivos – `_aislados/`
+## 4. Limpieza de archivos innecesarios
 
-Se creó `_aislados/` y se movieron 10 archivos de la raíz, organizados por categoría.
-Se documentó la decisión y la forma de restaurar cada archivo en `_aislados/README.md`.
+Los 10 archivos huérfanos que antes estaban en `_aislados/` ya se eliminaron definitivamente del repositorio tras la revisión.
+La evidencia que justificó su aislamiento previo se conserva en esta sección.
 
 ### 4.1 `_aislados/duplicados_raiz_vs_App/` (5 archivos)
 Existen tanto en la raíz como en `App/`. La copia útil es la de `App/`; la de la raíz es huérfana porque referencia rutas que no existen en la raíz (`src/`, `tests/`, `scripts/`, `prisma/`).
@@ -135,7 +135,7 @@ Scripts puntuales de depuración. Todos hacen `require('./src/db/prisma')`, ruta
 | 4 | 🟠 P1 | Habilitar `QA_SKIP_OTP=1` en CI (no‑prod) y publicar `QA_BEARER_TOKEN` como secret para que `qa:modules` corra en pipeline. |
 | 5 | 🟡 P2 | Reemplazar `csurf` (archivado) y actualizar `otplib` a v13. |
 | 6 | 🟡 P2 | Eliminar `tests/unit/` del script `test:unit` (no existe el directorio) o crearlo. |
-| 7 | 🟢 P3 | Tras revisión, borrar definitivamente el contenido de `_aislados/` o moverlo a un branch de archivo. |
+| 7 | 🟢 P3 | Completado: se eliminó definitivamente el contenido de `_aislados/`. |
 
 ---
 
@@ -145,6 +145,6 @@ Scripts puntuales de depuración. Todos hacen `require('./src/db/prisma')`, ruta
 - **Frontend estático:** ✅ 11/11 módulos con UI funcionando.
 - **API funcional:** ⛔ no verificable en este sandbox por ausencia de Postgres (R‑2).
 - **Suite Jest:** ⛔ regresión real P0 (R‑1).
-- **Higiene del repositorio:** ✅ 10 archivos basura/duplicados aislados en `_aislados/` sin romper ningún flujo.
+- **Higiene del repositorio:** ✅ 10 archivos basura/duplicados eliminados definitivamente sin romper ningún flujo.
 
 ➡️ **Acciones mínimas para volver a verde end‑to‑end:** (1) resolver R‑1 y (2) levantar Postgres de QA. Tras eso, `npm run qa:modules` debería terminar en 0 y `npm test` reportar cobertura real.
