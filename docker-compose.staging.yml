@@ -1,0 +1,55 @@
+version: '3.8'
+
+# ShowDeal Staging Compose Override
+# Use with: docker-compose -f docker-compose.prod.yml -f docker-compose.staging.yml
+
+services:
+  postgres:
+    environment:
+      POSTGRES_PASSWORD: staging_test_password_123
+      POSTGRES_DB: showdeal_staging
+    volumes:
+      - postgres_staging_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U showdeal_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    environment:
+      REDIS_PASSWORD: staging_redis_password
+    volumes:
+      - redis_staging_data:/data
+
+  showdeal-api:
+    environment:
+      NODE_ENV: staging
+      LOG_LEVEL: debug
+      ENABLE_DEBUG_ERRORS: 1
+      DATABASE_URL: postgresql://showdeal_user:staging_test_password_123@postgres:5432/showdeal_staging
+      REDIS_URL: redis://:staging_redis_password@redis:6379/0
+      CORS_ORIGIN: "http://localhost:3000,http://localhost:3001,http://staging.showdeal.local"
+      JWT_SECRET: staging_jwt_secret_change_me_in_real_staging
+      OTP_ISSUER: ShowDeal-Staging
+    # Scale down for staging
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  postgres_staging_data:
+    driver: local
+  redis_staging_data:
+    driver: local
