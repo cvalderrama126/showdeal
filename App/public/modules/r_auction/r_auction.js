@@ -72,40 +72,55 @@ async function init_r_auction() {
     const totalInvitations = Array.from(state.invitationsByEvent.values()).reduce((acc, list) => acc + list.length, 0);
 
     root.innerHTML = `
-      <div class="sd-card p-4">
-        <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-3">
-          <div>
-            <h4 class="mb-1">Lotes Judiciales</h4>
-            <div class="sd-muted">Subastas por ofertas cerradas con múltiples empresas invitadas y una o más rondas.</div>
+      <div class="sd-card p-4 lot-module-shell">
+        <div class="lot-module-header d-flex align-items-start justify-content-between flex-wrap gap-3 mb-3">
+          <div class="d-flex align-items-center gap-3">
+            <div class="lot-header-icon">LJ</div>
+            <div>
+              <h4 class="mb-1">Lotes Judiciales</h4>
+              <div class="sd-muted">Subastas por ofertas cerradas con múltiples empresas invitadas y una o más rondas.</div>
+            </div>
           </div>
-          <span class="badge rounded-pill text-bg-dark">Módulo rediseñado</span>
+          <span class="lot-module-badge">Modulo redisenado</span>
         </div>
 
         <div class="row g-3 mb-4">
           <div class="col-12 col-md-4">
-            <div class="border rounded-3 p-3 h-100">
-              <div class="small text-muted">Lotes creados</div>
-              <div class="h4 mb-0">${totalLots}</div>
+            <div class="lot-kpi-card h-100">
+              <div class="lot-kpi-icon lot-kpi-icon-lot">LT</div>
+              <div>
+                <div class="small text-muted">Lotes creados</div>
+                <div class="h4 mb-0 lot-kpi-value lot-kpi-value-lot">${totalLots}</div>
+              </div>
             </div>
           </div>
           <div class="col-12 col-md-4">
-            <div class="border rounded-3 p-3 h-100">
-              <div class="small text-muted">Vehículos asociados</div>
-              <div class="h4 mb-0">${totalVehicles}</div>
+            <div class="lot-kpi-card h-100">
+              <div class="lot-kpi-icon lot-kpi-icon-vehicle">VH</div>
+              <div>
+                <div class="small text-muted">Vehículos asociados</div>
+                <div class="h4 mb-0 lot-kpi-value lot-kpi-value-vehicle">${totalVehicles}</div>
+              </div>
             </div>
           </div>
           <div class="col-12 col-md-4">
-            <div class="border rounded-3 p-3 h-100">
-              <div class="small text-muted">Invitaciones activas</div>
-              <div class="h4 mb-0">${totalInvitations}</div>
+            <div class="lot-kpi-card h-100">
+              <div class="lot-kpi-icon lot-kpi-icon-invite">IV</div>
+              <div>
+                <div class="small text-muted">Invitaciones activas</div>
+                <div class="h4 mb-0 lot-kpi-value lot-kpi-value-invite">${totalInvitations}</div>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="row g-4">
           <div class="col-12">
-            <div class="border rounded-3 p-3 h-100">
-              <h5 class="mb-2">Crear Lote Judicial</h5>
+            <div class="lot-create-card rounded-3 p-3 h-100">
+              <h5 class="mb-2 d-flex align-items-center gap-2">
+                <span class="lot-create-icon">+</span>
+                <span>Crear Lote Judicial</span>
+              </h5>
               <div class="small text-muted mb-3">
                 Crea el lote, invita empresas y carga la base de vehículos en Excel en un solo flujo.
               </div>
@@ -122,6 +137,7 @@ async function init_r_auction() {
                   <select id="lotCreateCompanies" class="form-select" multiple size="1">
                     ${state.companies.map((company) => `<option value="${escapeHtml(company.id_company)}">${escapeHtml(company.company || company.id_company)}</option>`).join("")}
                   </select>
+                  <div class="small text-muted mt-1" id="lotSelectedCompaniesText">0 seleccionadas</div>
                 </div>
                 <div class="col-12 col-xl-3">
                   <label class="form-label">Inicio</label>
@@ -131,12 +147,22 @@ async function init_r_auction() {
                   <label class="form-label">Cierre</label>
                   <input id="lotCreateEnd" type="datetime-local" class="form-control">
                 </div>
-                <div class="col-12 col-xl-8">
+
+                <div class="col-12">
                   <label class="form-label">Base de vehículos (Excel)</label>
-                  <input id="lotCreateFile" type="file" class="form-control" accept=".xlsx,.xls">
+                  <div id="lotDropzone" class="lot-file-dropzone" role="button" tabindex="0" aria-label="Zona de carga de archivo Excel">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                      <div>
+                        <div class="fw-semibold">Arrastra y suelta tu archivo Excel aqui</div>
+                        <div class="small text-muted">o selecciona un archivo desde tu equipo</div>
+                      </div>
+                      <button id="btnPickLotFile" type="button" class="btn btn-outline-primary">Elegir archivo</button>
+                    </div>
+                    <div id="lotFileText" class="small text-muted mt-2">Ningun archivo seleccionado.</div>
+                  </div>
+                  <input id="lotCreateFile" type="file" class="d-none" accept=".xlsx,.xls">
                 </div>
-                <div class="col-12 col-xl-4">
-                </div>
+
                 <div class="col-12 judicial-lot-actions-row">
                   <div class="judicial-lot-actions d-flex gap-2 justify-content-xl-end flex-wrap">
                     <button
@@ -156,7 +182,7 @@ async function init_r_auction() {
                     >Refrescar</button>
                   </div>
                 </div>
-                <div class="col-12">
+                <div class="col-12 mt-1">
                   <div class="form-text">Empresas: selecciona una o más con Ctrl/Cmd + clic. Archivo requerido con columnas: placa, ciudad, direccion, Marca, Modelo, Año, valor adjudicación.</div>
                 </div>
               </div>
@@ -164,8 +190,11 @@ async function init_r_auction() {
           </div>
         </div>
 
-        <div class="border rounded-3 p-3 mt-4">
-          <h5 class="mb-3">Lotes existentes</h5>
+        <div class="lot-table-card rounded-3 p-3 mt-4">
+          <h5 class="mb-3 d-flex align-items-center gap-2">
+            <span class="lot-table-icon">TB</span>
+            <span>Lotes existentes</span>
+          </h5>
           <div class="table-responsive">
             <table class="table table-sm align-middle sd-table mb-0">
               <thead>
@@ -177,6 +206,7 @@ async function init_r_auction() {
                   <th>Vehículos</th>
                   <th>Empresas</th>
                   <th>Estado</th>
+                  <th class="text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -196,12 +226,13 @@ async function init_r_auction() {
                         <td>${escapeHtml(vehicles)}</td>
                         <td>${escapeHtml(invites)}</td>
                         <td><span class="badge text-bg-light border">${escapeHtml(statusBadge(lot))}</span></td>
+                        <td class="text-center text-muted">-</td>
                       </tr>
                     `;
                   }).join("")
                   : `
                     <tr>
-                      <td colspan="7" class="text-center text-muted py-4">No hay lotes registrados.</td>
+                      <td colspan="8" class="text-center text-muted py-4">No hay lotes creados aun.</td>
                     </tr>
                   `}
               </tbody>
@@ -210,6 +241,74 @@ async function init_r_auction() {
         </div>
       </div>
     `;
+
+    bindFormEnhancements();
+  }
+
+  function bindFormEnhancements() {
+    const fileInput = document.getElementById("lotCreateFile");
+    const dropzone = document.getElementById("lotDropzone");
+    const fileText = document.getElementById("lotFileText");
+    const companiesSelect = document.getElementById("lotCreateCompanies");
+    const companiesText = document.getElementById("lotSelectedCompaniesText");
+
+    const updateFileLabel = () => {
+      if (!fileText) return;
+      const file = fileInput?.files?.[0];
+      fileText.textContent = file
+        ? `Archivo seleccionado: ${file.name}`
+        : "Ningun archivo seleccionado.";
+    };
+
+    const updateCompaniesLabel = () => {
+      if (!companiesText) return;
+      const count = getSelectedValues(companiesSelect).length;
+      companiesText.textContent = `${count} seleccionada${count === 1 ? "" : "s"}`;
+    };
+
+    if (fileInput) {
+      fileInput.addEventListener("change", updateFileLabel);
+    }
+
+    if (companiesSelect) {
+      companiesSelect.addEventListener("change", updateCompaniesLabel);
+    }
+
+    if (dropzone && fileInput) {
+      const preventDefaults = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      };
+
+      dropzone.addEventListener("click", () => fileInput.click());
+      dropzone.addEventListener("dragenter", (event) => {
+        preventDefaults(event);
+        dropzone.classList.add("is-dragover");
+      });
+      dropzone.addEventListener("dragover", (event) => {
+        preventDefaults(event);
+        dropzone.classList.add("is-dragover");
+      });
+      dropzone.addEventListener("dragleave", (event) => {
+        preventDefaults(event);
+        dropzone.classList.remove("is-dragover");
+      });
+      dropzone.addEventListener("drop", (event) => {
+        preventDefaults(event);
+        dropzone.classList.remove("is-dragover");
+
+        const droppedFiles = event.dataTransfer?.files;
+        if (!droppedFiles || droppedFiles.length === 0) return;
+
+        const transfer = new DataTransfer();
+        transfer.items.add(droppedFiles[0]);
+        fileInput.files = transfer.files;
+        updateFileLabel();
+      });
+    }
+
+    updateFileLabel();
+    updateCompaniesLabel();
   }
 
   function setCreateAlert(type, message) {
@@ -397,7 +496,20 @@ async function init_r_auction() {
   }
 
   root.addEventListener("click", (event) => {
-    if (event.target.id === "btnRefreshLots") {
+    const refreshButton = event.target.closest("#btnRefreshLots");
+    const createButton = event.target.closest("#btnCreateLot");
+    const downloadButton = event.target.closest("#btnDownloadAssetTemplate");
+    const pickFileButton = event.target.closest("#btnPickLotFile");
+
+    if (pickFileButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const fileInput = document.getElementById("lotCreateFile");
+      if (fileInput) fileInput.click();
+      return;
+    }
+
+    if (refreshButton) {
       loadData()
         .then(() => render())
         .catch((err) => {
@@ -406,13 +518,13 @@ async function init_r_auction() {
       return;
     }
 
-    if (event.target.id === "btnCreateLot") {
+    if (createButton) {
       createLotFromForm().catch((err) => {
         setCreateAlert("danger", err?.error || err?.message || "No se pudo crear el lote judicial.");
       });
     }
 
-    if (event.target.id === "btnDownloadAssetTemplate") {
+    if (downloadButton) {
       setCreateAlert("info", "Descargando plantilla...");
       downloadAssetTemplate()
         .then(() => {

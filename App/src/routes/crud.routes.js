@@ -360,6 +360,17 @@ router.post(
         return res.status(400).json({ ok: false, error: "INVALID_COMPANY_ID" });
       }
 
+      if (req.auth?.isAdmin !== true) {
+        const authCompanyId = toBigIntId(req.auth?.companyId);
+        if (!authCompanyId) {
+          return res.status(403).json({ ok: false, error: "INVALID_COMPANY_IN_TOKEN" });
+        }
+
+        if (authCompanyId !== requestedCompanyId) {
+          return res.status(403).json({ ok: false, error: "COMPANY_MISMATCH" });
+        }
+      }
+
       if (!req.file || !req.file.buffer) {
         return res.status(400).json({ ok: false, error: "FILE_REQUIRED" });
       }

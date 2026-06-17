@@ -246,6 +246,125 @@ a:hover{ color: var(--sd-primary-2); }
   margin-top: 4px;
 }
 
+.lot-module-shell {
+  background: linear-gradient(180deg, #fdfefe 0%, #f8fbff 100%);
+}
+
+.lot-header-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #e8eeff 0%, #f4f7ff 100%);
+  color: #3d57d8;
+  font-weight: 800;
+  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.5px;
+}
+
+.lot-module-badge {
+  background: linear-gradient(180deg, #5c68d8 0%, #4050d1 100%);
+  color: #fff;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.lot-kpi-card {
+  border: 1px solid #e6ebf5;
+  border-radius: 14px;
+  padding: 16px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+}
+
+.lot-kpi-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.72rem;
+}
+
+.lot-kpi-icon-lot {
+  background: #ecf2ff;
+  color: #4663ef;
+}
+
+.lot-kpi-icon-vehicle {
+  background: #e8f9f0;
+  color: #18a558;
+}
+
+.lot-kpi-icon-invite {
+  background: #ffefe7;
+  color: #ef5b21;
+}
+
+.lot-kpi-value {
+  font-weight: 800;
+}
+
+.lot-kpi-value-lot {
+  color: #4365f1;
+}
+
+.lot-kpi-value-vehicle {
+  color: #20aa5f;
+}
+
+.lot-kpi-value-invite {
+  color: #f26522;
+}
+
+.lot-create-card,
+.lot-table-card {
+  border: 1px solid #e6ebf5;
+  background: #ffffff;
+}
+
+.lot-create-icon,
+.lot-table-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  background: #eef3ff;
+  color: #4a5ee9;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.68rem;
+}
+
+.lot-file-dropzone {
+  border: 2px dashed #b9cbfb;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fbff 0%, #f4f8ff 100%);
+  padding: 16px;
+  transition: border-color 120ms ease, background-color 120ms ease, transform 120ms ease;
+}
+
+.lot-file-dropzone:hover,
+.lot-file-dropzone.is-dragover {
+  border-color: #5d7af6;
+  background: linear-gradient(180deg, #f3f8ff 0%, #edf4ff 100%);
+  transform: translateY(-1px);
+}
+
+.lot-file-dropzone button {
+  min-width: 140px;
+}
+
 .judicial-lot-actions button.lot-btn {
   appearance: none;
   -webkit-appearance: none;
@@ -299,6 +418,21 @@ a:hover{ color: var(--sd-primary-2); }
 .judicial-lot-actions button.lot-btn-refresh:hover {
   background: linear-gradient(180deg, #64748b 0%, #475569 100%);
   border-color: #475569;
+}
+
+@media (max-width: 768px) {
+  .lot-kpi-card {
+    min-height: 82px;
+  }
+
+  .judicial-lot-actions button.lot-btn {
+    min-width: 100%;
+  }
+
+  .lot-module-badge {
+    width: 100%;
+    text-align: center;
+  }
 }
 
 .first-login-visual-guide {
