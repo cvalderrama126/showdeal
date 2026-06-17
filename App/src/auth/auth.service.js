@@ -20,14 +20,20 @@ function getOtpEncryptionKey() {
 
 const OTP_SECRET_PREFIX = "enc:v1:";
 
+function createOtpEncryptionError() {
+  const err = new Error('OTP_SECRET_ENCRYPTION_FAILED');
+  err.status = 503;
+  return err;
+}
+
 function encryptOtpSecret(plainSecret) {
   if (!plainSecret) return plainSecret;
   const key = getOtpEncryptionKey();
-  if (!key) return plainSecret; // Fallback: store as-is if no key configured
+  if (!key) throw createOtpEncryptionError();
   try {
     return OTP_SECRET_PREFIX + encryptAES(plainSecret, key);
   } catch {
-    return plainSecret; // Fail open only during encryption – plaintext is still better than crash
+    throw createOtpEncryptionError();
   }
 }
 

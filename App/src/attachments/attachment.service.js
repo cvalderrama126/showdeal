@@ -220,7 +220,12 @@ function buildWhereClause({ includeInactive = false, q, id_asset, tp_attach, all
   }
 
   if (id_asset) {
-    where.id_asset = id_asset;
+    if (allowedAssetIds !== null) {
+      const isAllowedAsset = allowedAssetIds.some((assetId) => assetId === id_asset);
+      where.id_asset = isAllowedAsset ? id_asset : { in: [] };
+    } else {
+      where.id_asset = id_asset;
+    }
   }
 
   if (tp_attach) {
@@ -254,8 +259,8 @@ async function listAttachments({
 } = {}) {
   // Non-admin users: restrict to assets connected to their company
   let allowedAssetIds = null;
-  if (!isAdmin && companyId) {
-    allowedAssetIds = await getConnectedAssetIdsForCompany(companyId);
+  if (!isAdmin) {
+    allowedAssetIds = companyId ? await getConnectedAssetIdsForCompany(companyId) : [];
   }
 
   // Non-admin users cannot view inactive records across all assets
@@ -439,9 +444,11 @@ async function getAttachmentDownload(id_attach, { includeInactive = false } = {}
 async function listAttachmentOptions({ companyId = null, isAdmin = false } = {}) {
   // Non-admin users: only show assets their company can access
   let assetWhere = { is_active: true };
-  if (!isAdmin && companyId) {
-    const connected = await getConnectedAssetIdsForCompany(companyId);
+  let attachmentTypeWhere = { is_active: true };
+  if (!isAdmin) {
+    const connected = companyId ? await getConnectedAssetIdsForCompany(companyId) : [];
     assetWhere = { is_active: true, id_asset: { in: connected } };
+    attachmentTypeWhere = { is_active: true, id_asset: { in: connected } };
   }
 
   const [assets, attachmentTypes] = await Promise.all([
@@ -456,6 +463,7 @@ async function listAttachmentOptions({ companyId = null, isAdmin = false } = {})
       },
     }),
     prisma.r_attach.findMany({
+      where: attachmentTypeWhere,
       distinct: ["tp_attach"],
       orderBy: { tp_attach: "asc" },
       select: {
