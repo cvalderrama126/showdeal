@@ -8,6 +8,12 @@
       .replaceAll("'", "&#039;");
   }
 
+  function sanitizeAlertType(type) {
+    const normalized = String(type || "").toLowerCase();
+    const allowed = new Set(["success", "danger", "warning", "info", "secondary", "primary"]);
+    return allowed.has(normalized) ? normalized : "info";
+  }
+
   function prettyJson(value) {
     if (value === null || value === undefined || value === "") return "";
     if (typeof value === "string") return value;
@@ -293,11 +299,17 @@
     function showAlert(targetId, type, msg) {
       const el = document.getElementById(targetId);
       if (!el) return;
-      el.innerHTML = `
-        <div class="alert alert-${type} py-2 mb-3">
-          <div class="small">${escapeHtml(msg)}</div>
-        </div>
-      `;
+      el.textContent = "";
+
+      const alert = document.createElement("div");
+      alert.className = `alert alert-${sanitizeAlertType(type)} py-2 mb-3`;
+
+      const message = document.createElement("div");
+      message.className = "small";
+      message.textContent = String(msg || "");
+
+      alert.appendChild(message);
+      el.appendChild(alert);
     }
 
     function clearAlert(targetId) {
@@ -676,7 +688,17 @@
 
     function openDelete(id) {
       state.deletingId = id;
-      document.getElementById("crudDeleteInfo").innerHTML = `<div class="sd-muted small">ID: <b>${escapeHtml(id)}</b></div>`;
+      const info = document.getElementById("crudDeleteInfo");
+      if (info) {
+        info.textContent = "";
+        const wrap = document.createElement("div");
+        wrap.className = "sd-muted small";
+        wrap.append("ID: ");
+        const bold = document.createElement("b");
+        bold.textContent = String(id || "");
+        wrap.appendChild(bold);
+        info.appendChild(wrap);
+      }
       bootstrap.Modal.getOrCreateInstance(document.getElementById("crudDeleteModal")).show();
     }
 

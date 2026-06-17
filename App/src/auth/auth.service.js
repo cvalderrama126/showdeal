@@ -9,6 +9,8 @@ const { parseYmdDate, getLatestCredential, mergeAdditional } = require("../utils
 const { encryptAES, decryptAES } = require("../utils/crypto.utils");
 
 const OTP_REPLAY_TTL_SECONDS = 60;
+const MAX_FAILED_LOGIN_ATTEMPTS = Number.parseInt(process.env.MAX_FAILED_LOGIN_ATTEMPTS || "3", 10);
+const ACCOUNT_LOCK_MINUTES = Number.parseInt(process.env.ACCOUNT_LOCK_MINUTES || "15", 10);
 
 // OTP secret encryption key derived from OTP_ENCRYPTION_KEY env var.
 // Falls back to JWT_SECRET so existing deployments don't break.
@@ -146,6 +148,76 @@ function otpInfo(additional) {
   const issuer = typeof otp?.issuer === "string" ? otp.issuer : "ShowDeal";
   const label = typeof otp?.label === "string" ? otp.label : null;
   return { enabled, secret, issuer, label };
+}
+
+function getLoginSecurityInfo(additional) {
+  const loginSecurity = additional?.login_security;
+  const failedAttemptsRaw = Number.parseInt(String(loginSecurity?.failed_attempts ?? "0"), 10);
+  const failedAttempts = Number.isFinite(failedAttemptsRaw) && failedAttemptsRaw > 0 ? failedAttemptsRaw : 0;
+
+  const lockedUntilText = typeof loginSecurity?.locked_until === "string"
+    ? loginSecurity.locked_until
+    : null;
+  const lockedUntilDate = lockedUntilText ? new Date(lockedUntilText) : null;
+  const isValidLockDate = lockedUntilDate && Number.isFinite(lockedUntilDate.getTime());
+
+  return {
+    failedAttempts,
+    lockedUntil: isValidLockDate ? lockedUntilDate : null,
+  };
+}
+
+function isAccountLocked(additional) {
+  const { lockedUntil } = getLoginSecurityInfo(additional);
+  if (!lockedUntil) return false;
+  return lockedUntil.getTime() > Date.now();
+}
+
+async function registerFailedLoginAttempt(user) {
+  const now = new Date();
+  const security = getLoginSecurityInfo(user.additional);
+  const nextAttempts = security.failedAttempts + 1;
+  const shouldLock = nextAttempts >= Math.max(1, MAX_FAILED_LOGIN_ATTEMPTS);
+  const lockedUntil = shouldLock
+    ? new Date(now.getTime() + Math.max(1, ACCOUNT_LOCK_MINUTES) * 60 * 1000)
+    : null;
+
+  const nextAdditional = mergeAdditional(user.additional, {
+    login_security: {
+      failed_attempts: nextAttempts,
+      locked_until: lockedUntil ? lockedUntil.toISOString() : null,
+      last_failed_at: now.toISOString(),
+    },
+  });
+
+  await prisma.r_user.update({
+    where: { id_user: user.id_user },
+    data: { additional: nextAdditional },
+  });
+
+  return {
+    failedAttempts: nextAttempts,
+    lockedUntil,
+    locked: shouldLock,
+  };
+}
+
+async function clearFailedLoginState(user) {
+  const security = getLoginSecurityInfo(user.additional);
+  if (!security.failedAttempts && !security.lockedUntil) return;
+
+  const nextAdditional = mergeAdditional(user.additional, {
+    login_security: {
+      failed_attempts: 0,
+      locked_until: null,
+      last_success_at: new Date().toISOString(),
+    },
+  });
+
+  await prisma.r_user.update({
+    where: { id_user: user.id_user },
+    data: { additional: nextAdditional },
+  });
 }
 
 function normalizeUserRecord(row) {
@@ -340,6 +412,15 @@ async function login({ user, password }) {
     return { ok: false, status: 401, error: "Invalid credentials" };
   }
 
+  if (isAccountLocked(dbUser.additional)) {
+    return {
+      ok: false,
+      status: 423,
+      error: "ACCOUNT_LOCKED",
+      code: "ACCOUNT_LOCKED",
+    };
+  }
+
   const cred = getLatestCredential(dbUser.authentication);
   if (!cred?.password) {
     return { ok: false, status: 500, error: "User has no password in authentication JSONB" };
@@ -347,8 +428,19 @@ async function login({ user, password }) {
 
   const isValidPassword = await verifyPasswordWithMigration(password, cred.password, dbUser.id_user);
   if (!isValidPassword) {
+    const loginFailure = await registerFailedLoginAttempt(dbUser);
+    if (loginFailure.locked) {
+      return {
+        ok: false,
+        status: 423,
+        error: "ACCOUNT_LOCKED",
+        code: "ACCOUNT_LOCKED",
+      };
+    }
     return { ok: false, status: 401, error: "Invalid credentials" };
   }
+
+  await clearFailedLoginState(dbUser);
 
   // Expiración password
   const exp = parseYmdDate(cred.expired);
@@ -595,6 +687,11 @@ async function persistPasswordChange({ user, newPassword }) {
 
   const nextAdditional = mergeAdditional(user.additional, {
     first_login: false,
+    login_security: {
+      failed_attempts: 0,
+      locked_until: null,
+      last_password_change_at: new Date().toISOString(),
+    },
   });
 
   const revokedAdditional = bumpTokenVersion(nextAdditional);

@@ -60,6 +60,28 @@ async function init_r_event() {
       .replaceAll("'", "&#039;");
   }
 
+  function sanitizeAlertType(type) {
+    const normalized = String(type || "").toLowerCase();
+    const allowed = new Set(["success", "danger", "warning", "info", "secondary", "primary"]);
+    return allowed.has(normalized) ? normalized : "info";
+  }
+
+  function renderAlert(hostId, type, message) {
+    const host = document.getElementById(hostId);
+    if (!host) return;
+    host.textContent = "";
+
+    const alert = document.createElement("div");
+    alert.className = `alert alert-${sanitizeAlertType(type)} py-2 mb-3`;
+
+    const body = document.createElement("div");
+    body.className = "small";
+    body.textContent = String(message || "");
+
+    alert.appendChild(body);
+    host.appendChild(alert);
+  }
+
   function ensureEventAssetsUi() {
     if (document.getElementById("eventAssetsModal")) return;
 
@@ -204,23 +226,11 @@ async function init_r_event() {
   }
 
   function showEventAssetAlert(type, message) {
-    const host = document.getElementById("eventAssetsAlert");
-    if (!host) return;
-    host.innerHTML = `
-      <div class="alert alert-${type} py-2 mb-3">
-        <div class="small">${escapeHtml(message)}</div>
-      </div>
-    `;
+    renderAlert("eventAssetsAlert", type, message);
   }
 
   function showAttachAlert(type, message) {
-    const host = document.getElementById("eventAttachAlert");
-    if (!host) return;
-    host.innerHTML = `
-      <div class="alert alert-${type} py-2 mb-3">
-        <div class="small">${escapeHtml(message)}</div>
-      </div>
-    `;
+    renderAlert("eventAttachAlert", type, message);
   }
 
   function formatBytes(value) {
@@ -310,14 +320,38 @@ async function init_r_event() {
     if (title) title.textContent = `Previsualizacion - ${row.file_name || row.id_attach}`;
 
     if (mime.startsWith("image/")) {
-      body.innerHTML = `<img src="${url}" alt="preview" style="max-width:100%;height:auto;border-radius:12px;">`;
+      body.textContent = "";
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = "preview";
+      img.style.maxWidth = "100%";
+      img.style.height = "auto";
+      img.style.borderRadius = "12px";
+      body.appendChild(img);
     } else if (mime === "application/pdf") {
-      body.innerHTML = `<iframe src="${url}" style="width:100%;height:75vh;border:0;border-radius:12px;"></iframe>`;
+      body.textContent = "";
+      const frame = document.createElement("iframe");
+      frame.src = url;
+      frame.style.width = "100%";
+      frame.style.height = "75vh";
+      frame.style.border = "0";
+      frame.style.borderRadius = "12px";
+      body.appendChild(frame);
     } else if (mime.startsWith("text/")) {
       const text = await blob.text();
-      body.innerHTML = `<pre style="white-space:pre-wrap;max-height:75vh;overflow:auto;">${escapeHtml(text)}</pre>`;
+      body.textContent = "";
+      const pre = document.createElement("pre");
+      pre.style.whiteSpace = "pre-wrap";
+      pre.style.maxHeight = "75vh";
+      pre.style.overflow = "auto";
+      pre.textContent = text;
+      body.appendChild(pre);
     } else {
-      body.innerHTML = `<div class="alert alert-info mb-0">No hay previsualizacion para este tipo de archivo. Usa Descargar.</div>`;
+      body.textContent = "";
+      const info = document.createElement("div");
+      info.className = "alert alert-info mb-0";
+      info.textContent = "No hay previsualizacion para este tipo de archivo. Usa Descargar.";
+      body.appendChild(info);
     }
 
     box.classList.remove("d-none");
@@ -342,7 +376,7 @@ async function init_r_event() {
 
     const previewBox = document.getElementById("eventAttachPreviewBox");
     const previewBody = document.getElementById("eventAttachPreviewBody");
-    if (previewBody) previewBody.innerHTML = "";
+    if (previewBody) previewBody.textContent = "";
     previewBox?.classList.add("d-none");
 
     await loadEmbeddedAttachments();
@@ -352,10 +386,19 @@ async function init_r_event() {
   function renderAssetOptions() {
     const select = document.getElementById("eventAssetId");
     if (!select) return;
-    const options = eventAssetState.assets
-      .map((row) => `<option value="${escapeHtml(row.id_asset)}">${escapeHtml(row.uin || row.id_asset)} · ${escapeHtml(row.tp_asset || "")} · ${escapeHtml(row.status || "")}</option>`)
-      .join("");
-    select.innerHTML = `<option value="">Selecciona...</option>${options}`;
+    select.textContent = "";
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Selecciona...";
+    select.appendChild(placeholder);
+
+    eventAssetState.assets.forEach((row) => {
+      const option = document.createElement("option");
+      option.value = String(row.id_asset || "");
+      option.textContent = `${String(row.uin || row.id_asset || "")} · ${String(row.tp_asset || "")} · ${String(row.status || "")}`;
+      select.appendChild(option);
+    });
 
     const tpAuctionSelect = document.getElementById("eventAssetTpAuction");
     if (tpAuctionSelect && eventAssetState.event?.tp_event) {
@@ -452,20 +495,28 @@ async function init_r_event() {
   }
 
   function showInviteAlert(type, message) {
-    const host = document.getElementById("eventInviteAlert");
-    if (!host) return;
-    host.innerHTML = `<div class="alert alert-${type} py-2 mb-3"><div class="small">${escapeHtml(message)}</div></div>`;
+    renderAlert("eventInviteAlert", type, message);
   }
 
   function renderInviteCompanyOptions() {
     const select = document.getElementById("eventInviteCompanyId");
     if (!select) return;
     const invitedIds = new Set(inviteState.rows.map((r) => String(r.id_company)));
-    const options = inviteState.companies
+    select.textContent = "";
+
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "Selecciona...";
+    select.appendChild(placeholder);
+
+    inviteState.companies
       .filter((c) => !invitedIds.has(String(c.id_company)))
-      .map((c) => `<option value="${escapeHtml(c.id_company)}">${escapeHtml(c.company || c.id_company)}</option>`)
-      .join("");
-    select.innerHTML = `<option value="">Selecciona...</option>${options}`;
+      .forEach((c) => {
+        const option = document.createElement("option");
+        option.value = String(c.id_company || "");
+        option.textContent = String(c.company || c.id_company || "");
+        select.appendChild(option);
+      });
   }
 
   function renderInviteRows() {

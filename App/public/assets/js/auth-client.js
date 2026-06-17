@@ -63,6 +63,15 @@
     window.alert(message || "Ocurrio un error procesando la solicitud.");
   }
 
+  function showInfo(message) {
+    window.alert(message || "Operacion completada.");
+  }
+
+  function getQueryParam(name) {
+    const params = new URLSearchParams(window.location.search || "");
+    return params.get(name);
+  }
+
   function redirectIfAuthenticated() {
     const session = getSession();
     if (!session?.user) return;
@@ -117,6 +126,11 @@
       if (!response.data || response.data.ok !== true) {
         if (response.data?.code === "PASSWORD_EXPIRED") {
           showError("Tu contrasena vencio. Debes actualizarla antes de continuar.");
+          return;
+        }
+
+        if (response.data?.code === "ACCOUNT_LOCKED" || response.data?.error === "ACCOUNT_LOCKED") {
+          showError("Tu cuenta está bloqueada temporalmente por intentos fallidos. Recupera tu contraseña o intenta más tarde.");
           return;
         }
 
@@ -190,6 +204,67 @@
     }
   }
 
+  async function handlePasswordResetRequestSubmit(ev) {
+    ev.preventDefault();
+    const form = ev.target;
+    form.classList.add("was-validated");
+    if (!form.checkValidity()) return;
+
+    const email = (qs("resetRequestEmail")?.value || "").trim().toLowerCase();
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+
+    try {
+      const response = await postJson("/auth/password-reset/request", { email });
+      if (!response.ok) {
+        showError(response.data?.error || "No se pudo procesar la solicitud de recuperación.");
+        return;
+      }
+
+      showInfo(response.data?.message || "Si el correo existe, se enviaron instrucciones de recuperación.");
+      form.reset();
+      form.classList.remove("was-validated");
+    } catch {
+      showError("No se pudo conectar con el servidor.");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function handlePasswordResetSubmit(ev) {
+    ev.preventDefault();
+    const form = ev.target;
+    form.classList.add("was-validated");
+    if (!form.checkValidity()) return;
+
+    const token = (qs("resetToken")?.value || "").trim();
+    const password = qs("resetPassword")?.value || "";
+    const confirm = qs("resetPasswordConfirm")?.value || "";
+
+    if (password !== confirm) {
+      showError("La confirmación de contraseña no coincide.");
+      return;
+    }
+
+    const btn = form.querySelector('button[type="submit"]');
+    if (btn) btn.disabled = true;
+
+    try {
+      const response = await postJson("/auth/password-reset/reset", { token, password });
+      if (!response.ok) {
+        showError(response.data?.error || "No se pudo restablecer la contraseña.");
+        return;
+      }
+
+      showInfo(response.data?.message || "Contraseña actualizada correctamente.");
+      window.location.replace("/index.html");
+    } catch {
+      showError("No se pudo conectar con el servidor.");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   window.sdLogout = function (redirectTo = "/index.html") {
     fetch("/auth/logout", {
       method: "POST",
@@ -212,6 +287,18 @@
 
     const otpForm = qs("otpForm");
     if (otpForm) otpForm.addEventListener("submit", handleOtpSubmit);
+
+    const requestResetForm = qs("passwordResetRequestForm");
+    if (requestResetForm) requestResetForm.addEventListener("submit", handlePasswordResetRequestSubmit);
+
+    const resetPasswordForm = qs("passwordResetForm");
+    if (resetPasswordForm) resetPasswordForm.addEventListener("submit", handlePasswordResetSubmit);
+
+    const resetTokenInput = qs("resetToken");
+    if (resetTokenInput && !resetTokenInput.value) {
+      const tokenFromUrl = getQueryParam("token");
+      if (tokenFromUrl) resetTokenInput.value = tokenFromUrl;
+    }
 
     const challenge = getChallenge();
     const label = qs("otpUserLabel");

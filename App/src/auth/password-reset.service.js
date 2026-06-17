@@ -1,5 +1,6 @@
 const { prisma } = require('../db/prisma');
 const { generateSecureToken, hashPassword } = require('../utils/crypto.utils');
+const { mergeAdditional } = require('../utils/common');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
@@ -338,6 +339,13 @@ async function resetPasswordWithToken(token, newPassword) {
         },
         data: {
           authentication: buildUpdatedAuthentication(user.authentication, hashedPassword),
+          additional: mergeAdditional(user.additional, {
+            login_security: {
+              failed_attempts: 0,
+              locked_until: null,
+              last_password_reset_at: new Date().toISOString(),
+            },
+          }),
           upd_at: new Date()
         }
       });
