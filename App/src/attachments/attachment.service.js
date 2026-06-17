@@ -199,8 +199,21 @@ function normalizeUpdateInput(input) {
   return { payload, hasChanges };
 }
 
-function buildWhereClause({ includeInactive = false, q, id_asset, tp_attach }) {
+async function getConnectedAssetIdsForCompany(companyId) {
+  const rows = await prisma.r_connection.findMany({
+    where: { id_company: companyId },
+    select: { id_asset: true },
+  });
+  return rows.map((r) => r.id_asset);
+}
+
+function buildWhereClause({ includeInactive = false, q, id_asset, tp_attach, allowedAssetIds = null }) {
   const where = {};
+
+  // Non-admin isolation: restrict to company-connected assets
+  if (allowedAssetIds !== null) {
+    where.id_asset = { in: allowedAssetIds };
+  }
 
   if (!includeInactive) {
     where.is_active = true;
@@ -236,12 +249,24 @@ async function listAttachments({
   q = "",
   id_asset,
   tp_attach,
+  companyId = null,
+  isAdmin = false,
 } = {}) {
+  // Non-admin users: restrict to assets connected to their company
+  let allowedAssetIds = null;
+  if (!isAdmin && companyId) {
+    allowedAssetIds = await getConnectedAssetIdsForCompany(companyId);
+  }
+
+  // Non-admin users cannot view inactive records across all assets
+  const effectiveIncludeInactive = isAdmin ? includeInactive : false;
+
   const where = buildWhereClause({
-    includeInactive,
+    includeInactive: effectiveIncludeInactive,
     q,
     id_asset: parseOptionalQueryBigInt(id_asset),
     tp_attach: String(tp_attach || "").trim(),
+    allowedAssetIds,
   });
 
   const [rows, total] = await Promise.all([
@@ -411,10 +436,17 @@ async function getAttachmentDownload(id_attach, { includeInactive = false } = {}
   };
 }
 
-async function listAttachmentOptions() {
+async function listAttachmentOptions({ companyId = null, isAdmin = false } = {}) {
+  // Non-admin users: only show assets their company can access
+  let assetWhere = { is_active: true };
+  if (!isAdmin && companyId) {
+    const connected = await getConnectedAssetIdsForCompany(companyId);
+    assetWhere = { is_active: true, id_asset: { in: connected } };
+  }
+
   const [assets, attachmentTypes] = await Promise.all([
     prisma.r_asset.findMany({
-      where: { is_active: true },
+      where: assetWhere,
       orderBy: { uin: "asc" },
       select: {
         id_asset: true,

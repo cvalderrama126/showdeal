@@ -6,8 +6,42 @@ const { prisma } = require("../db/prisma");
 const { isSha256Hash, bcryptHash } = require("./password-migration.service");
 const { setIfNotExistsWithTTL } = require("../utils/redis.client");
 const { parseYmdDate, getLatestCredential, mergeAdditional } = require("../utils/common");
+const { encryptAES, decryptAES } = require("../utils/crypto.utils");
 
 const OTP_REPLAY_TTL_SECONDS = 60;
+
+// OTP secret encryption key derived from OTP_ENCRYPTION_KEY env var.
+// Falls back to JWT_SECRET so existing deployments don't break.
+// In production, set OTP_ENCRYPTION_KEY to a dedicated 64-char hex random string.
+function getOtpEncryptionKey() {
+  const key = process.env.OTP_ENCRYPTION_KEY || process.env.JWT_SECRET || "";
+  return key;
+}
+
+const OTP_SECRET_PREFIX = "enc:v1:";
+
+function encryptOtpSecret(plainSecret) {
+  if (!plainSecret) return plainSecret;
+  const key = getOtpEncryptionKey();
+  if (!key) return plainSecret; // Fallback: store as-is if no key configured
+  try {
+    return OTP_SECRET_PREFIX + encryptAES(plainSecret, key);
+  } catch {
+    return plainSecret; // Fail open only during encryption – plaintext is still better than crash
+  }
+}
+
+function decryptOtpSecret(storedSecret) {
+  if (!storedSecret) return storedSecret;
+  if (!storedSecret.startsWith(OTP_SECRET_PREFIX)) return storedSecret; // Plaintext (legacy)
+  const key = getOtpEncryptionKey();
+  if (!key) return null;
+  try {
+    return decryptAES(storedSecret.slice(OTP_SECRET_PREFIX.length), key);
+  } catch {
+    return null; // Corrupt or wrong key – treat as missing
+  }
+}
 
 function buildOtpReplayKey(userId, otp) {
   return `otp:used:${String(userId)}:${String(otp)}`;
@@ -95,7 +129,8 @@ function todayUtcYmd() {
 
 function otpInfo(additional) {
   const otp = additional?.otp;
-  const secret = typeof otp?.secret === "string" ? otp.secret : null;
+  const rawSecret = typeof otp?.secret === "string" ? otp.secret : null;
+  const secret = rawSecret ? decryptOtpSecret(rawSecret) : null;
   const enabled = otp?.enabled === true;  // SOLO si está explícitamente habilitado
   const issuer = typeof otp?.issuer === "string" ? otp.issuer : "ShowDeal";
   const label = typeof otp?.label === "string" ? otp.label : null;
@@ -354,7 +389,7 @@ async function login({ user, password }) {
       otp: {
         type: "totp",
         enabled: false,
-        secret,
+        secret: encryptOtpSecret(secret),
         issuer: "ShowDeal",
         label,
         otpauth_url: otpauthUrl,
@@ -466,7 +501,7 @@ async function otpSetup({ id_user, issuer = "ShowDeal" }) {
     otp: {
       type: "totp",
       enabled: false,
-      secret,
+      secret: encryptOtpSecret(secret),
       issuer,
       label,
       otpauth_url: otpauthUrl,

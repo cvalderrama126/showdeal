@@ -6,7 +6,7 @@ version: '3.8'
 services:
   postgres:
     environment:
-      POSTGRES_PASSWORD: staging_test_password_123
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: showdeal_staging
     volumes:
       - postgres_staging_data:/var/lib/postgresql/data
@@ -18,7 +18,7 @@ services:
 
   redis:
     environment:
-      REDIS_PASSWORD: staging_redis_password
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
     volumes:
       - redis_staging_data:/data
 
@@ -27,10 +27,10 @@ services:
       NODE_ENV: staging
       LOG_LEVEL: debug
       ENABLE_DEBUG_ERRORS: 1
-      DATABASE_URL: postgresql://showdeal_user:staging_test_password_123@postgres:5432/showdeal_staging
-      REDIS_URL: redis://:staging_redis_password@redis:6379/0
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
       CORS_ORIGIN: "http://localhost:3000,http://localhost:3001,http://staging.showdeal.local"
-      JWT_SECRET: staging_jwt_secret_change_me_in_real_staging
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       OTP_ISSUER: ShowDeal-Staging
     # Scale down for staging
     deploy:

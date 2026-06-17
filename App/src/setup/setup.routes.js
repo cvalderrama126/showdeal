@@ -10,7 +10,14 @@ function setupGuard(req, res, next) {
     return res.status(404).json({ ok: false, error: "NOT_FOUND" });
   }
 
+  // In production, SETUP_TOKEN is mandatory. Fail closed if not configured.
+  const isProduction = process.env.NODE_ENV === "production";
   const requiredToken = process.env.SETUP_TOKEN;
+
+  if (isProduction && !requiredToken) {
+    return res.status(503).json({ ok: false, error: "SETUP_DISABLED" });
+  }
+
   if (requiredToken) {
     const provided = req.get("x-setup-token");
     if (!provided || provided !== requiredToken) {

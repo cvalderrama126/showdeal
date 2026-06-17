@@ -202,7 +202,9 @@ router.use(requireAuth);
 
 router.get("/meta/options", requireModuleAccess("r_attach", "read"), async (req, res, next) => {
   try {
-    const data = await listAttachmentOptions();
+    const isAdmin = req.auth?.isAdmin === true;
+    const companyId = req.auth?.companyId ? BigInt(String(req.auth.companyId)) : null;
+    const data = await listAttachmentOptions({ companyId, isAdmin });
     return res.json(jsonSafe({ ok: true, data }));
   } catch (err) {
     return next(err);
@@ -211,6 +213,8 @@ router.get("/meta/options", requireModuleAccess("r_attach", "read"), async (req,
 
 router.get("/", requireModuleAccess("r_attach", "read"), async (req, res, next) => {
   try {
+    const isAdmin = req.auth?.isAdmin === true;
+    const companyId = req.auth?.companyId ? BigInt(String(req.auth.companyId)) : null;
     const take = parseInteger(req.query.take, 25, { min: 1, max: 200 });
     const skip = parseInteger(req.query.skip, 0, { min: 0, max: 100000 });
     const includeInactive = req.query.includeInactive === "true";
@@ -222,6 +226,8 @@ router.get("/", requireModuleAccess("r_attach", "read"), async (req, res, next) 
       q: req.query.q,
       id_asset: req.query.id_asset,
       tp_attach: req.query.tp_attach,
+      companyId,
+      isAdmin,
     });
 
     return res.json(jsonSafe({ ok: true, data: result.rows, meta: result.meta }));

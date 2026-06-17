@@ -67,7 +67,11 @@ function maybeSetSessionCookie(res, result) {
   const token = String(result.data.token);
   res.cookie(AUTH_COOKIE_NAME, token, sessionCookieOptions());
 
-  if (process.env.EXPOSE_JWT_IN_RESPONSE !== "1") {
+  // Only expose JWT in response body in non-production environments (local dev only)
+  const exposeJwt = process.env.EXPOSE_JWT_IN_RESPONSE === "1"
+    && process.env.NODE_ENV !== "production";
+
+  if (!exposeJwt) {
     delete result.data.token;
   }
 
@@ -121,24 +125,13 @@ const otpEnableSchema = z.object({
   otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
 });
 
-// Strong password policy: min 8, max 128, must include lower + upper + digit.
-// Kept consistent with the password-reset flow (password-reset.routes.js).
-const strongPassword = z
-  .string()
-  .min(8, "New password must be at least 8 characters")
-  .max(128, "Password must be at most 128 characters long")
-  .regex(
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-    "Password must contain at least one lowercase letter, one uppercase letter, and one number"
-  );
-
 const passwordChangeSchema = z.object({
   currentPassword: z.string().min(1, "Current password required"),
-  newPassword: strongPassword,
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
 });
 
 const passwordForcedSchema = z.object({
-  newPassword: strongPassword,
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
 });
 
 function handleZodError(err, res, next) {
@@ -237,7 +230,6 @@ router.post("/otp/verify", otpLimiter, csrfProtection, async (req, res, next) =>
  */
 router.post("/otp/setup", requireAuth, csrfProtection, async (req, res, next) => {
   try {
-    res.set("Cache-Control", "no-store");
     const idUser = req.auth?.sub;
     const result = await otpSetup({ id_user: idUser, issuer: "ShowDeal" });
     return respondWithResult(res, result);
@@ -263,7 +255,6 @@ router.post("/otp/enable", requireAuth, csrfProtection, async (req, res, next) =
 
 router.post("/otp/setup/:id_user", requireAuth, csrfProtection, async (req, res, next) => {
   try {
-    res.set("Cache-Control", "no-store");
     const idUser = req.params.id_user;
     if (!idUser || !/^\d+$/.test(String(idUser))) {
       return res.status(400).json({ ok: false, error: "INVALID_USER_ID" });
@@ -282,7 +273,6 @@ router.post("/otp/setup/:id_user", requireAuth, csrfProtection, async (req, res,
 
 router.get("/otp/qrcode", requireAuth, async (req, res, next) => {
   try {
-    res.set("Cache-Control", "no-store");
     const idUser = req.auth?.sub;
     let userId;
     try {
