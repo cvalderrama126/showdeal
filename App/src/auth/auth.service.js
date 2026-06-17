@@ -14,7 +14,12 @@ const OTP_REPLAY_TTL_SECONDS = 60;
 // Falls back to JWT_SECRET so existing deployments don't break.
 // In production, set OTP_ENCRYPTION_KEY to a dedicated 64-char hex random string.
 function getOtpEncryptionKey() {
-  const key = process.env.OTP_ENCRYPTION_KEY || process.env.JWT_SECRET || "";
+  const isProduction = process.env.NODE_ENV === "production";
+  const dedicatedKey = process.env.OTP_ENCRYPTION_KEY || "";
+  if (isProduction) {
+    return dedicatedKey;
+  }
+  const key = dedicatedKey || process.env.JWT_SECRET || "";
   return key;
 }
 

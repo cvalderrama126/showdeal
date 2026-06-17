@@ -13,7 +13,7 @@ async function init_r_user() {
     if (!el) return;
     el.innerHTML = `
       <div class="alert alert-${type} py-2 mb-3">
-        <div class="small">${msg}</div>
+        <div class="small">${escapeHtml(msg)}</div>
       </div>
     `;
   }
@@ -374,8 +374,8 @@ async function init_r_user() {
   function openDelete(row) {
     state.deletingId = row?.id_user;
     document.getElementById("confirmDelInfo").innerHTML = `
-      <div class="sd-muted small">ID: <b>${state.deletingId}</b></div>
-      <div class="sd-muted small">Usuario: <b>${row?.user || ""}</b></div>
+      <div class="sd-muted small">ID: <b>${escapeHtml(state.deletingId)}</b></div>
+      <div class="sd-muted small">Usuario: <b>${escapeHtml(row?.user || "")}</b></div>
     `;
     confirmDelModal.show();
   }
