@@ -10,16 +10,22 @@ function getLatestCredential(authentication) {
 
   let bestCredential = null;
   let bestCreatedAt = null;
+  let bestIndex = -1;
 
-  for (const item of credentials) {
+  credentials.forEach((item, index) => {
     const created = parseYmdDate(item?.created);
-    if (!created) continue;
+    if (!created) return;
 
-    if (!bestCreatedAt || created.getTime() > bestCreatedAt.getTime()) {
+    if (
+      !bestCreatedAt
+      || created.getTime() > bestCreatedAt.getTime()
+      || (created.getTime() === bestCreatedAt.getTime() && index > bestIndex)
+    ) {
       bestCreatedAt = created;
       bestCredential = item;
+      bestIndex = index;
     }
-  }
+  });
 
   if (!bestCredential) {
     const last = credentials[credentials.length - 1];

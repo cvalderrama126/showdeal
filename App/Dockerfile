@@ -71,7 +71,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 COPY --chown=nodejs:nodejs healthcheck.js ./
 
 # Usar dumb-init para iniciar el proceso
-ENTRYPOINT ["/usr/sbin/dumb-init", "--"]
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 
 # Comando por defecto
 CMD ["node", "src/server.js"]

@@ -6,19 +6,19 @@
 
 ```powershell
 # 1. Navegar al proyecto
-cd showDeal\App
+cd showDeal
 
 # 2. Copiar configuración
-cp .env.docker .env
+Copy-Item .env.docker .env
 
 # 3. Levantar servicios
-docker-compose up -d
+docker compose up -d --build
 
 # 4. Esperar ~40 segundos a que PostgreSQL esté listo
 Start-Sleep -Seconds 40
 
 # 5. Generar Prisma client
-docker-compose exec app npx prisma generate
+docker compose exec app npx prisma generate
 
 # 6. Verificar
 curl http://localhost:3000/health
@@ -92,19 +92,19 @@ curl http://localhost:3000/health
 
 ```bash
 # Levantar
-docker-compose up -d
+docker compose up -d --build
 
 # Ver logs
-docker-compose logs -f app
+docker compose logs -f app
 
 # Entrar a shell
-docker-compose exec app sh
+docker compose exec app sh
 
 # Conectar a BD
-docker-compose exec postgres psql -U showdeal -d showdeal
+docker compose exec postgres psql -U showdeal -d showdeal
 
 # Para detener
-docker-compose down
+docker compose down
 ```
 
 **Ver:** [DOCKER.md - Desarrollo Local](./DOCKER.md#-desarrollo-local)

@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ShowDeal · Manual de Funcionalidad v2.0</title>
+<style>
+:root{
+  --p:#F84300;--p2:#ff6a3d;--dark:#0f172a;--gray:#334155;
+  --bg:#f6f7fb;--card:#fff;--border:rgba(15,23,42,.09);
+  --sw:260px;--nh:62px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:#0b1220;line-height:1.65}
+a{color:var(--p);text-decoration:none}
+a:hover{color:var(--p2)}
+code{background:#f1f5f9;border:1px solid #e2e8f0;padding:1px 6px;border-radius:4px;font-size:.82em}
+
+/* topbar */
+.topbar{position:fixed;top:0;left:0;right:0;z-index:300;height:var(--nh);
+  background:linear-gradient(90deg,var(--dark),#111827);border-bottom:3px solid var(--p);
+  display:flex;align-items:center;padding:0 24px;gap:12px}
+.brand{font-weight:800;font-size:1.1rem;color:#fff;display:flex;align-items:center;gap:8px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--p);display:inline-block}
+.topbar-meta{margin-left:auto;font-size:.75rem;color:rgba(255,255,255,.45);text-align:right;line-height:1.3}
+.topbar-meta strong{color:rgba(255,255,255,.8)}
+
+/* sidebar */
+.sidebar{position:fixed;top:var(--nh);left:0;width:var(--sw);height:calc(100vh - var(--nh));
+  background:var(--dark);overflow-y:auto;border-right:1px solid rgba(255,255,255,.05);padding-bottom:40px}
+.sidebar::-webkit-scrollbar{width:3px}
+.sidebar::-webkit-scrollbar-thumb{background:rgba(248,67,0,.35);border-radius:4px}
+.nav-section{padding:14px 18px 4px;font-size:.66rem;font-weight:700;letter-spacing:1.3px;
+  color:rgba(255,255,255,.25);text-transform:uppercase}
+.nav-link{display:flex;align-items:center;gap:9px;padding:8px 18px;font-size:.83rem;
+  color:rgba(255,255,255,.6);transition:.15s;border-left:3px solid transparent;cursor:pointer}
+.nav-link:hover,.nav-link.active{background:rgba(248,67,0,.11);color:#fff;border-left-color:var(--p)}
+.nav-ico{width:17px;text-align:center;flex-shrink:0}
+.badge-ok{margin-left:auto;background:#15803d;color:#fff;font-size:.58rem;font-weight:700;
+  padding:1px 6px;border-radius:999px}
+
+/* main */
+.main{margin-left:var(--sw);padding-top:calc(var(--nh)+28px);padding-bottom:80px}
+
+/* cover */
+.cover{background:linear-gradient(135deg,var(--dark) 0%,#1e293b 55%,#0f172a 100%);
+  padding:56px 52px 48px;position:relative;overflow:hidden}
+.cover::after{content:"SD";position:absolute;right:-8px;bottom:-24px;font-size:200px;
+  font-weight:900;color:rgba(248,67,0,.055);line-height:1;pointer-events:none;user-select:none}
+.cover-title{font-size:2.2rem;font-weight:800;color:#fff;line-height:1.15}
+.cover-title span{color:var(--p)}
+.cover-sub{color:rgba(255,255,255,.5);margin-top:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:24px}
+.chip{display:inline-flex;align-items:center;gap:5px;background:rgba(255,255,255,.05);
+  border:1px solid rgba(255,255,255,.1);padding:5px 13px;border-radius:999px;
+  font-size:.76rem;color:rgba(255,255,255,.7)}
+.chip-dot{width:6px;height:6px;border-radius:50%}
+.chip-dot.g{background:#22c55e}.chip-dot.o{background:var(--p)}.chip-dot.b{background:#3b82f6}
+
+/* section */
+.section{padding:44px 52px 12px}
+.sec-header{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.sec-icon{width:42px;height:42px;border-radius:11px;background:rgba(248,67,0,.1);
+  border:1px solid rgba(248,67,0,.2);display:flex;align-items:center;justify-content:center;
+  font-size:1.2rem;flex-shrink:0}
+.sec-title{font-size:1.4rem;font-weight:700;color:var(--dark)}
+.sec-desc{font-size:.87rem;color:var(--gray);margin-top:2px}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 4px 20px rgba(15,23,42,.05);overflow:hidden}
+.card-body{padding:22px 26px}
+.grid{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));margin-bottom:20px}
+
+/* screenshot */
+.sc-card{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  overflow:hidden;box-shadow:0 4px 20px rgba(15,23,42,.06);cursor:zoom-in;transition:.2s}
+.sc-card:hover{transform:translateY(-3px);box-shadow:0 12px 32px rgba(15,23,42,.12)}
+.sc-card img{width:100%;display:block;border-bottom:1px solid var(--border)}
+.sc-footer{padding:10px 14px;display:flex;align-items:center;gap:7px}
+.fig-num{background:var(--p);color:#fff;font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:5px;flex-shrink:0}
+.fig-lbl{font-size:.8rem;color:var(--gray);font-weight:500}
+.sc-full{margin:0 0 20px}
+.sc-full img{width:100%;border-radius:11px;border:1px solid var(--border);
+  box-shadow:0 6px 28px rgba(15,23,42,.09);cursor:zoom-in;display:block}
+.fig-cap{text-align:center;margin-top:7px;font-size:.78rem;color:#64748b;font-style:italic}
+
+/* tables */
+.tbl{width:100%;border-collapse:collapse;font-size:.83rem}
+.tbl th{background:#f1f5f9;color:var(--gray);font-size:.7rem;font-weight:700;letter-spacing:.6px;
+  text-transform:uppercase;padding:9px 13px;text-align:left;border-bottom:2px solid var(--border)}
+.tbl td{padding:8px 13px;border-bottom:1px solid #f1f5f9;color:#1e293b}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:#fafbff}
+.tag{display:inline-flex;align-items:center;font-size:.68rem;font-weight:600;padding:2px 7px;border-radius:5px}
+.g{background:#dcfce7;color:#15803d}.o{background:#fff7ed;color:#c2410c}
+.r{background:#fee2e2;color:#b91c1c}.b{background:#eff6ff;color:#1d4ed8}
+.gray{background:#f1f5f9;color:#475569}.y{background:#fefce8;color:#92400e}
+
+/* callout */
+.callout{display:flex;gap:11px;padding:13px 16px;border-radius:10px;margin:14px 0;font-size:.86rem}
+.callout .ico{font-size:1.05rem;flex-shrink:0;margin-top:1px}
+.info{background:#eff6ff;border-left:4px solid #3b82f6;color:#1e40af}
+.warn{background:#fffbeb;border-left:4px solid #f59e0b;color:#92400e}
+.succ{background:#f0fdf4;border-left:4px solid #22c55e;color:#15803d}
+.dang{background:#fff1f2;border-left:4px solid #f43f5e;color:#9f1239}
+
+/* flow */
+.flow{display:flex;flex-direction:column;margin:14px 0 20px}
+.flow-step{display:flex;align-items:flex-start;gap:14px}
+.flow-con{display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+.flow-num{width:30px;height:30px;border-radius:50%;background:var(--p);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700}
+.flow-line{width:2px;height:24px;background:rgba(248,67,0,.18);margin:2px auto}
+.flow-step:last-child .flow-line{display:none}
+.flow-body{padding-top:4px;padding-bottom:16px}
+.flow-lbl{font-size:.86rem;font-weight:600;color:var(--dark)}
+.flow-det{font-size:.78rem;color:var(--gray);margin-top:2px}
+.flow-ok .flow-num{background:#16a34a}
+
+/* checklist */
+.chk{list-style:none;display:flex;flex-direction:column;gap:7px;margin:10px 0}
+.chk li{display:flex;align-items:center;gap:9px;font-size:.86rem}
+.chk li::before{content:"✓";width:19px;height:19px;border-radius:50%;background:#dcfce7;
+  color:#15803d;display:flex;align-items:center;justify-content:center;
+  font-size:.68rem;font-weight:700;flex-shrink:0}
+
+/* role pill */
+.role-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;
+  border-radius:999px;font-size:.75rem;font-weight:700;border:1px solid}
+.rp-root{background:#fef3c7;color:#92400e;border-color:#fde68a}
+.rp-sup{background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe}
+.rp-auc{background:#f0fdf4;color:#15803d;border-color:#bbf7d0}
+.rp-buy{background:#fdf4ff;color:#7e22ce;border-color:#e9d5ff}
+.rp-sel{background:#fff7ed;color:#c2410c;border-color:#fed7aa}
+.rp-aud{background:#f8fafc;color:#475569;border-color:#cbd5e1}
+.rp-vie{background:#fafafa;color:#6b7280;border-color:#e5e7eb}
+
+/* matrix */
+.matrix{overflow-x:auto;margin-bottom:20px}
+.matrix table{border-collapse:collapse;min-width:700px;font-size:.8rem}
+.matrix th{background:var(--dark);color:rgba(255,255,255,.85);padding:10px 12px;
+  font-size:.7rem;letter-spacing:.5px;text-transform:uppercase;font-weight:700;
+  text-align:center;border:1px solid rgba(255,255,255,.08)}
+.matrix th:first-child{text-align:left}
+.matrix td{padding:9px 12px;border:1px solid var(--border);vertical-align:middle;color:#1e293b}
+.matrix td:first-child{font-weight:600;background:#f8fafc}
+.matrix td:not(:first-child){text-align:center}
+.mx-yes::before{content:"✓";color:#16a34a;font-weight:700;font-size:1rem}
+.mx-no::before{content:"–";color:#94a3b8;font-size:.9rem}
+.mx-ro::before{content:"👁";font-size:.85rem}
+
+/* sec grid */
+.sec-grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.sec-item{background:#f8fafc;border:1px solid var(--border);border-radius:9px;
+  padding:12px 14px;display:flex;align-items:flex-start;gap:9px}
+.sec-ok{color:#16a34a;font-size:1rem;flex-shrink:0;margin-top:1px}
+.sec-name{font-size:.82rem;font-weight:600;color:var(--dark)}
+.sec-desc{font-size:.73rem;color:#64748b;margin-top:1px}
+
+/* divider */
+.div{height:1px;background:var(--border);margin:0 52px}
+
+/* footer */
+.footer{background:var(--dark);color:rgba(255,255,255,.35);text-align:center;
+  padding:22px;font-size:.76rem;margin-left:var(--sw)}
+.footer strong{color:var(--p)}
+
+/* lightbox */
+#lb{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.88);
+  align-items:center;justify-content:center}
+#lb.open{display:flex}
+#lb img{max-width:92vw;max-height:88vh;border-radius:7px;box-shadow:0 24px 80px rgba(0,0,0,.7)}
+#lb-x{position:fixed;top:16px;right:22px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);
+  color:#fff;border-radius:50%;width:38px;height:38px;font-size:1rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+#lb-x:hover{background:rgba(248,67,0,.45)}
+
+/* scroll-top */
+#stb{position:fixed;bottom:26px;right:26px;z-index:100;width:42px;height:42px;
+  border-radius:50%;background:var(--p);color:#fff;border:none;font-size:.9rem;cursor:pointer;
+  box-shadow:0 6px 18px rgba(248,67,0,.4);display:none;align-items:center;justify-content:center}
+#stb:hover{background:var(--p2)}
+#stb.show{display:flex}
+</style>
+</head>
+<body>
+
+<!-- topbar -->
+<nav class="topbar">
+  <div class="brand"><span class="dot"></span>ShowDeal</div>
+  <span style="color:rgba(255,255,255,.3);font-size:.83rem">Manual de Funcionalidad</span>
+  <div class="topbar-meta"><strong>v2.0</strong><br>18 jun 2026</div>
+</nav>
+
+<!-- sidebar -->
+<aside class="sidebar">
+  <div class="nav-section">Inicio</div>
+  <a class="nav-link active" href="#cover"><span class="nav-ico">🏠</span>Portada</a>
+
+  <div class="nav-section">Autenticación</div>
+  <a class="nav-link" href="#s-login"><span class="nav-ico">🔑</span>Login<span class="badge-ok">OK</span></a>
+  <a class="nav-link" href="#s-recovery"><span class="nav-ico">🔄</span>Recuperación<span class="badge-ok">OK</span></a>
+  <a class="nav-link" href="#s-onboard"><span class="nav-ico">🛡️</span>Primer ingreso<span class="badge-ok">OK</span></a>
+
+  <div class="nav-section">Roles</div>
+  <a class="nav-link" href="#r-root"><span class="nav-ico">👑</span>Root / Admin</a>
+  <a class="nav-link" href="#r-sup"><span class="nav-ico">🔭</span>Supervisor</a>
+  <a class="nav-link" href="#r-auc"><span class="nav-ico">🏷️</span>Auctioneer</a>
+  <a class="nav-link" href="#r-buy"><span class="nav-ico">🛒</span>Buyer</a>
+  <a class="nav-link" href="#r-sel"><span class="nav-ico">📦</span>Seller</a>
+  <a class="nav-link" href="#r-aud"><span class="nav-ico">🔍</span>Auditor</a>
+  <a class="nav-link" href="#r-vie"><span class="nav-ico">👁️</span>Viewer</a>
+
+  <div class="nav-section">Referencia</div>
+  <a class="nav-link" href="#s-matrix"><span class="nav-ico">📊</span>Matriz de accesos</a>
+  <a class="nav-link" href="#s-security"><span class="nav-ico">🔒</span>Seguridad</a>
+</aside>
+
+<!-- main -->
+<main class="main">
+
+<!-- ═══ COVER ═══════════════════════════════════════════════ -->
+<section id="cover" class="cover">
+  <div class="cover-title">Manual de<br><span>Funcionalidad</span></div>
+  <p class="cover-sub">Plataforma de subastas judiciales y comerciales · Todos los perfiles</p>
+  <div class="chips">
+    <span class="chip"><span class="chip-dot g"></span>v2.0 Validado</span>
+    <span class="chip"><span class="chip-dot o"></span>18 junio 2026</span>
+    <span class="chip"><span class="chip-dot b"></span>localhost:3001</span>
+    <span class="chip"><span class="chip-dot o"></span>7 roles documentados</span>
+  </div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ LOGIN ════════════════════════════════════════════════ -->
+<section id="s-login" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">🔑</div>
+    <div><div class="sec-title">Acceso público — Login</div>
+    <div class="sec-desc">Punto de entrada único para todos los perfiles</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="sc-card" onclick="lb('screenshots/sc_login.png')">
+      <img src="screenshots/sc_login.png" alt="Login" loading="lazy"/>
+      <div class="sc-footer"><span class="fig-num">Fig 1</span><span class="fig-lbl">Pantalla de ingreso</span></div>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <table class="tbl" style="margin-bottom:14px">
+          <thead><tr><th>Campo</th><th>Tipo</th><th>Req.</th></tr></thead>
+          <tbody>
+            <tr><td>Correo / Usuario</td><td>Email o username</td><td><span class="tag g">Sí</span></td></tr>
+            <tr><td>Contraseña</td><td>Password</td><td><span class="tag g">Sí</span></td></tr>
+          </tbody>
+        </table>
+        <table class="tbl">
+          <thead><tr><th>Evento</th><th>Respuesta</th><th>Código</th></tr></thead>
+          <tbody>
+            <tr><td>Credenciales inválidas (1–2)</td><td>Mensaje de error</td><td><span class="tag o">401</span></td></tr>
+            <tr><td>3er intento fallido</td><td>Cuenta bloqueada</td><td><span class="tag r">423</span></td></tr>
+            <tr><td>Login exitoso sin OTP</td><td>Redirige al Home</td><td><span class="tag g">200</span></td></tr>
+            <tr><td>OTP requerido</td><td>Redirige a verificación OTP</td><td><span class="tag b">202</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ RECUPERACIÓN ═════════════════════════════════════════ -->
+<section id="s-recovery" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">🔄</div>
+    <div><div class="sec-title">Recuperación de contraseña</div>
+    <div class="sec-desc">Flujo sin contraseña mediante token SHA-256 de un solo uso</div></div>
+  </div>
+
+  <div class="sc-full">
+    <img src="screenshots/sc_reset.png" alt="Recuperación" onclick="lb('screenshots/sc_reset.png')"/>
+    <p class="fig-cap">Fig 2 — Vista de recuperación (solicitud de token + reset)</p>
+  </div>
+
+  <div class="grid" style="margin-top:0">
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:13px">Flujo paso a paso</p>
+      <div class="flow">
+        <div class="flow-step"><div class="flow-con"><div class="flow-num">1</div><div class="flow-line"></div></div>
+          <div class="flow-body"><div class="flow-lbl">Solicitar recuperación</div><div class="flow-det">Ingresar correo corporativo</div></div></div>
+        <div class="flow-step"><div class="flow-con"><div class="flow-num">2</div><div class="flow-line"></div></div>
+          <div class="flow-body"><div class="flow-lbl">Token generado</div><div class="flow-det">SHA-256, TTL 1 hora, almacenado en <code>r_password_reset_token</code></div></div></div>
+        <div class="flow-step"><div class="flow-con"><div class="flow-num">3</div><div class="flow-line"></div></div>
+          <div class="flow-body"><div class="flow-lbl">Ingresar token + nueva contraseña</div><div class="flow-det">Mín. 8 caracteres, mayúscula y número</div></div></div>
+        <div class="flow-step flow-ok"><div class="flow-con"><div class="flow-num">✓</div><div class="flow-line"></div></div>
+          <div class="flow-body"><div class="flow-lbl" style="color:#16a34a">Reset exitoso</div><div class="flow-det">Token consumido, bloqueo liberado, sesiones previas invalidadas</div></div></div>
+      </div>
+    </div></div>
+    <div class="card"><div class="card-body">
+      <ul class="chk">
+        <li>Token generado y enviado al correo</li>
+        <li>Formulario acepta token manual</li>
+        <li>Nueva contraseña validada con reglas de fortaleza</li>
+        <li>Bloqueo de cuenta limpiado automáticamente</li>
+        <li>Versión de token actualizada → sesiones previas inválidas</li>
+        <li>Redirige al login con mensaje de confirmación</li>
+      </ul>
+      <div class="callout succ"><span class="ico">✅</span><div>Validado end-to-end: <em>"Password has been reset successfully."</em></div></div>
+    </div></div>
+  </div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ PRIMER INGRESO ═══════════════════════════════════════ -->
+<section id="s-onboard" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">🛡️</div>
+    <div><div class="sec-title">Primer ingreso y onboarding de seguridad</div>
+    <div class="sec-desc">Hardening guiado obligatorio en el primer acceso</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="sc-card" onclick="lb('screenshots/03-home-first-login-otp-setup.png')">
+      <img src="screenshots/03-home-first-login-otp-setup.png" alt="Onboarding" loading="lazy"/>
+      <div class="sc-footer"><span class="fig-num">Fig 3</span><span class="fig-lbl">Tour de seguridad activo</span></div>
+    </div>
+    <div class="sc-card" onclick="lb('screenshots/05-first-login-password-change.png')">
+      <img src="screenshots/05-first-login-password-change.png" alt="Cambio contraseña" loading="lazy"/>
+      <div class="sc-footer"><span class="fig-num">Fig 4</span><span class="fig-lbl">Cambio obligatorio de contraseña</span></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:0"><div class="card-body">
+    <div class="flow">
+      <div class="flow-step"><div class="flow-con"><div class="flow-num">1</div><div class="flow-line"></div></div>
+        <div class="flow-body"><div class="flow-lbl">Primer login exitoso</div><div class="flow-det">Flag <code>first_login: true</code> activa el tour guiado Shepherd</div></div></div>
+      <div class="flow-step"><div class="flow-con"><div class="flow-num">2</div><div class="flow-line"></div></div>
+        <div class="flow-body"><div class="flow-lbl">Cambio obligatorio de contraseña</div><div class="flow-det">Valida fortaleza y actualiza credencial activa</div></div></div>
+      <div class="flow-step"><div class="flow-con"><div class="flow-num">3</div><div class="flow-line"></div></div>
+        <div class="flow-body"><div class="flow-lbl">Configuración OTP / 2FA (recomendado)</div><div class="flow-det">QR + clave manual → verificación con código de 6 dígitos</div></div></div>
+      <div class="flow-step flow-ok"><div class="flow-con"><div class="flow-num">✓</div><div class="flow-line"></div></div>
+        <div class="flow-body"><div class="flow-lbl" style="color:#16a34a">Acceso completo al Home</div></div></div>
+    </div>
+    <div class="callout warn"><span class="ico">⚠️</span><div>El cambio de contraseña en el primer ingreso invalida el JWT activo. El usuario debe reingresar — comportamiento intencional por diseño de seguridad.</div></div>
+  </div></div>
+</section>
+<div class="div"></div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     ROLES
+════════════════════════════════════════════════════════════ -->
+
+<!-- ═══ ROOT / ADMIN ════════════════════════════════════════ -->
+<section id="r-root" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">👑</div>
+    <div>
+      <div class="sec-title">Perfil: Root / Administrador &nbsp;<span class="role-pill rp-root">Root</span></div>
+      <div class="sec-desc">Acceso total al sistema. Configura usuarios, roles, módulos y permisos.</div>
+    </div>
+  </div>
+
+  <div class="sc-full">
+    <img src="screenshots/sc_home_nav.png" alt="Home admin" onclick="lb('screenshots/sc_home_nav.png')"/>
+    <p class="fig-cap">Fig 5 — Home del administrador con sidebar completo visible</p>
+  </div>
+
+  <div class="grid">
+    <div class="sc-card" onclick="lb('screenshots/sc_users.png')">
+      <img src="screenshots/sc_users.png" alt="Usuarios" loading="lazy"/>
+      <div class="sc-footer"><span class="fig-num">Fig 6</span><span class="fig-lbl">Módulo Usuarios — gestión completa</span></div>
+    </div>
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Módulos disponibles</p>
+      <table class="tbl">
+        <thead><tr><th>Módulo</th><th>Acceso</th></tr></thead>
+        <tbody>
+          <tr><td>👥 Usuarios</td><td><span class="tag g">CRUD + OTP</span></td></tr>
+          <tr><td>🏢 Compañías</td><td><span class="tag g">CRUD</span></td></tr>
+          <tr><td>🏷️ Roles</td><td><span class="tag g">CRUD</span></td></tr>
+          <tr><td>🔐 Accesos</td><td><span class="tag g">CRUD</span></td></tr>
+          <tr><td>📋 Eventos de subasta</td><td><span class="tag g">CRUD + configurar</span></td></tr>
+          <tr><td>⚖️ Lotes Judiciales</td><td><span class="tag g">CRUD + Excel</span></td></tr>
+          <tr><td>🧩 Módulos</td><td><span class="tag g">Configurar</span></td></tr>
+          <tr><td>🎨 Tema UI</td><td><span class="tag g">Personalizar</span></td></tr>
+          <tr><td>📊 Resultados</td><td><span class="tag g">Ver todo</span></td></tr>
+        </tbody>
+      </table>
+    </div></div>
+  </div>
+
+  <div class="grid">
+    <div class="sc-card" onclick="lb('screenshots/sc_companies.png')">
+      <img src="screenshots/sc_companies.png" alt="Compañías" loading="lazy"/>
+      <div class="sc-footer"><span class="fig-num">Fig 7</span><span class="fig-lbl">Módulo Compañías</span></div>
+    </div>
+    <div class="sc-card" onclick="lb('screenshots/sc_roles.png')">
+      <img src="screenshots/sc_roles.png" alt="Roles" loading="lazy"/>
+      <div class="sc-footer"><span class="fig-num">Fig 8</span><span class="fig-lbl">Módulo Roles</span></div>
+    </div>
+    <div class="sc-card" onclick="lb('screenshots/sc_access.png')">
+      <img src="screenshots/sc_access.png" alt="Accesos" loading="lazy"/>
+      <div class="sc-footer"><span class="fig-num">Fig 9</span><span class="fig-lbl">Módulo Accesos (permisos por rol)</span></div>
+    </div>
+  </div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ SUPERVISOR ═══════════════════════════════════════════ -->
+<section id="r-sup" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">🔭</div>
+    <div>
+      <div class="sec-title">Perfil: Supervisor &nbsp;<span class="role-pill rp-sup">Supervisor</span></div>
+      <div class="sec-desc">Supervisa el ciclo de vida de eventos y subastas. No gestiona configuración del sistema.</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="sc-card" onclick="lb('screenshots/sc_events.png')">
+      <img src="screenshots/sc_events.png" alt="Eventos" loading="lazy"/>
+      <div class="sc-footer"><span class="fig-num">Fig 10</span><span class="fig-lbl">Módulo Eventos de subasta</span></div>
+    </div>
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Módulos disponibles</p>
+      <table class="tbl">
+        <thead><tr><th>Módulo</th><th>Acceso</th></tr></thead>
+        <tbody>
+          <tr><td>📋 Eventos de subasta</td><td><span class="tag g">Ver + gestionar</span></td></tr>
+          <tr><td>⚖️ Lotes Judiciales</td><td><span class="tag g">Ver + carga</span></td></tr>
+          <tr><td>📊 Resultados</td><td><span class="tag b">Solo lectura</span></td></tr>
+          <tr><td>👥 Usuarios</td><td><span class="tag gray">No disponible</span></td></tr>
+          <tr><td>🔐 Accesos / Roles</td><td><span class="tag gray">No disponible</span></td></tr>
+        </tbody>
+      </table>
+      <div class="callout info" style="margin-top:14px"><span class="ico">💡</span>
+        <div>El Supervisor puede ver todos los eventos y gestionar el ciclo operativo pero <strong>no puede crear ni eliminar usuarios</strong> ni modificar roles/permisos del sistema.</div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="grid">
+    <div class="sc-card" onclick="lb('screenshots/sc_lots.png')">
+      <img src="screenshots/sc_lots.png" alt="Lotes" loading="lazy"/>
+      <div class="sc-footer"><span class="fig-num">Fig 11</span><span class="fig-lbl">Módulo Lotes Judiciales</span></div>
+    </div>
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Flujo típico del Supervisor</p>
+      <div class="flow">
+        <div class="flow-step"><div class="flow-con"><div class="flow-num">1</div><div class="flow-line"></div></div>
+          <div class="flow-body"><div class="flow-lbl">Revisar eventos activos</div><div class="flow-det">Filtrar por modalidad, ver fechas de cierre</div></div></div>
+        <div class="flow-step"><div class="flow-con"><div class="flow-num">2</div><div class="flow-line"></div></div>
+          <div class="flow-body"><div class="flow-lbl">Gestionar lotes judiciales</div><div class="flow-det">Cargar vehículos, asignar empresas invitadas</div></div></div>
+        <div class="flow-step"><div class="flow-con"><div class="flow-num">3</div><div class="flow-line"></div></div>
+          <div class="flow-body"><div class="flow-lbl">Monitorear resultados</div><div class="flow-det">Ver ofertas recibidas y estado de subastas</div></div></div>
+        <div class="flow-step flow-ok"><div class="flow-con"><div class="flow-num">✓</div><div class="flow-line"></div></div>
+          <div class="flow-body"><div class="flow-lbl" style="color:#16a34a">Reportar al administrador</div></div></div>
+      </div>
+    </div></div>
+  </div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ AUCTIONEER ═══════════════════════════════════════════ -->
+<section id="r-auc" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">🏷️</div>
+    <div>
+      <div class="sec-title">Perfil: Auctioneer (Subastador) &nbsp;<span class="role-pill rp-auc">Auctioneer</span></div>
+      <div class="sec-desc">Opera eventos de subasta: carga activos, crea eventos y gestiona el proceso de puja.</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Módulos disponibles</p>
+      <table class="tbl">
+        <thead><tr><th>Módulo</th><th>Acceso</th></tr></thead>
+        <tbody>
+          <tr><td>📋 Eventos de subasta</td><td><span class="tag g">CRUD completo</span></td></tr>
+          <tr><td>🚗 Carga de vehículos</td><td><span class="tag g">Upload Excel</span></td></tr>
+          <tr><td>⚖️ Lotes Judiciales</td><td><span class="tag g">Gestionar</span></td></tr>
+          <tr><td>📊 Resultados de pujas</td><td><span class="tag g">Ver resultados</span></td></tr>
+          <tr><td>🏢 Compañías</td><td><span class="tag b">Solo lectura</span></td></tr>
+          <tr><td>👥 Usuarios</td><td><span class="tag gray">No disponible</span></td></tr>
+        </tbody>
+      </table>
+    </div></div>
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Tipos de subasta que puede crear</p>
+      <table class="tbl">
+        <thead><tr><th>Modalidad</th><th>Descripción</th></tr></thead>
+        <tbody>
+          <tr><td><span class="tag b">Pública</span></td><td>Abierta a todos los Buyers registrados</td></tr>
+          <tr><td><span class="tag o">Por invitación</span></td><td>Solo empresas seleccionadas</td></tr>
+          <tr><td><span class="tag gray">Sellada</span></td><td>Oferta única por empresa, ciega</td></tr>
+          <tr><td><span class="tag r">Judicial</span></td><td>Vinculada a proceso legal (lote judicial)</td></tr>
+        </tbody>
+      </table>
+      <div class="callout info" style="margin-top:14px"><span class="ico">💡</span>
+        <div>Las subastas judiciales requieren que el Auctioneer asocie el evento a un <strong>Lote Judicial</strong> creado previamente con número de radicado y juzgado.</div>
+      </div>
+    </div></div>
+  </div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ BUYER ═══════════════════════════════════════════════ -->
+<section id="r-buy" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">🛒</div>
+    <div>
+      <div class="sec-title">Perfil: Buyer (Comprador) &nbsp;<span class="role-pill rp-buy">Buyer</span></div>
+      <div class="sec-desc">Ve los activos disponibles y envía ofertas dentro de la ventana de tiempo.</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="sc-card" onclick="lb('screenshots/sc_buyer_assets.png')">
+      <img src="screenshots/sc_buyer_assets.png" alt="Buyer view" loading="lazy"/>
+      <div class="sc-footer"><span class="fig-num">Fig 12</span><span class="fig-lbl">Vista del Buyer — Vehículos para ofertar</span></div>
+    </div>
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Módulos disponibles</p>
+      <table class="tbl">
+        <thead><tr><th>Módulo</th><th>Acceso</th></tr></thead>
+        <tbody>
+          <tr><td>🛒 Vehículos para ofertar</td><td><span class="tag g">Ver + Ofertar</span></td></tr>
+          <tr><td>📊 Mis resultados</td><td><span class="tag b">Solo mis ofertas</span></td></tr>
+          <tr><td>📋 Eventos</td><td><span class="tag gray">No disponible</span></td></tr>
+          <tr><td>👥 Usuarios</td><td><span class="tag gray">No disponible</span></td></tr>
+        </tbody>
+      </table>
+      <div class="callout warn" style="margin-top:14px"><span class="ico">⚠️</span>
+        <div>El Buyer <strong>solo ve los activos de su compañía invitada</strong>. Si la subasta es sellada (<em>sobre cerrado</em>), solo puede enviar <strong>una oferta por activo</strong>. Intentos adicionales retornan <code>SEALED_BID_ALREADY_SUBMITTED</code>.</div>
+      </div>
+    </div></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Flujo de oferta</p>
+    <div class="flow">
+      <div class="flow-step"><div class="flow-con"><div class="flow-num">1</div><div class="flow-line"></div></div>
+        <div class="flow-body"><div class="flow-lbl">Ver activos disponibles</div><div class="flow-det">Solo activos de eventos donde su empresa está invitada y dentro de la ventana de tiempo</div></div></div>
+      <div class="flow-step"><div class="flow-con"><div class="flow-num">2</div><div class="flow-line"></div></div>
+        <div class="flow-body"><div class="flow-lbl">Ingresar monto de oferta</div><div class="flow-det">El sistema muestra la oferta actual (si es puja abierta) o la oculta (sobre cerrado)</div></div></div>
+      <div class="flow-step"><div class="flow-con"><div class="flow-num">3</div><div class="flow-line"></div></div>
+        <div class="flow-body"><div class="flow-lbl">Confirmar oferta</div><div class="flow-det">El sistema valida que la ventana esté abierta y la oferta sea válida</div></div></div>
+      <div class="flow-step flow-ok"><div class="flow-con"><div class="flow-num">✓</div><div class="flow-line"></div></div>
+        <div class="flow-body"><div class="flow-lbl" style="color:#16a34a">Oferta registrada</div><div class="flow-det">Visible en "Mis resultados" al cierre del evento</div></div></div>
+    </div>
+    <div class="callout dang"><span class="ico">🚫</span>
+      <div>Ofertas fuera de la ventana de tiempo retornan <code>EVENT_NOT_ACTIVE</code>. El sistema no acepta ofertas antes de <code>start_at</code> ni después de <code>end_at</code>.</div>
+    </div>
+  </div></div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ SELLER ═══════════════════════════════════════════════ -->
+<section id="r-sel" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">📦</div>
+    <div>
+      <div class="sec-title">Perfil: Seller (Vendedor) &nbsp;<span class="role-pill rp-sel">Seller</span></div>
+      <div class="sec-desc">Propietario de los activos. Ve el estado de sus activos en eventos activos.</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Módulos disponibles</p>
+      <table class="tbl">
+        <thead><tr><th>Módulo</th><th>Acceso</th></tr></thead>
+        <tbody>
+          <tr><td>📦 Mis activos</td><td><span class="tag b">Ver estado</span></td></tr>
+          <tr><td>📊 Resultados de mis activos</td><td><span class="tag b">Solo lectura</span></td></tr>
+          <tr><td>📋 Eventos</td><td><span class="tag b">Solo lectura</span></td></tr>
+          <tr><td>🚗 Carga de vehículos</td><td><span class="tag gray">No disponible</span></td></tr>
+        </tbody>
+      </table>
+    </div></div>
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Características del rol</p>
+      <ul class="chk">
+        <li>Ve solo sus propios activos (filtro por compañía)</li>
+        <li>Puede ver en qué evento está cada activo</li>
+        <li>Accede a los resultados de sus activos al cierre</li>
+        <li>No puede modificar eventos ni crear subastas</li>
+        <li>No ve ofertas de otros Sellers</li>
+      </ul>
+      <div class="callout info" style="margin-top:14px"><span class="ico">💡</span>
+        <div>La visibilidad del Seller hacia los activos está controlada por la tabla <code>r_connection</code> que vincula empresas con activos.</div>
+      </div>
+    </div></div>
+  </div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ AUDITOR ══════════════════════════════════════════════ -->
+<section id="r-aud" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">🔍</div>
+    <div>
+      <div class="sec-title">Perfil: Auditor &nbsp;<span class="role-pill rp-aud">Auditor</span></div>
+      <div class="sec-desc">Acceso de solo lectura a eventos, resultados y configuración. No puede modificar datos.</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Módulos disponibles (solo lectura)</p>
+      <table class="tbl">
+        <thead><tr><th>Módulo</th><th>Nivel</th></tr></thead>
+        <tbody>
+          <tr><td>📋 Eventos de subasta</td><td><span class="tag b">👁 Solo lectura</span></td></tr>
+          <tr><td>📊 Resultados completos</td><td><span class="tag b">👁 Solo lectura</span></td></tr>
+          <tr><td>⚖️ Lotes Judiciales</td><td><span class="tag b">👁 Solo lectura</span></td></tr>
+          <tr><td>👥 Usuarios</td><td><span class="tag b">👁 Solo lectura</span></td></tr>
+          <tr><td>🏢 Compañías</td><td><span class="tag b">👁 Solo lectura</span></td></tr>
+          <tr><td>🔐 Accesos</td><td><span class="tag b">👁 Solo lectura</span></td></tr>
+          <tr><td>Crear / Editar / Eliminar</td><td><span class="tag r">Bloqueado</span></td></tr>
+        </tbody>
+      </table>
+    </div></div>
+    <div class="card"><div class="card-body">
+      <div class="callout info"><span class="ico">💡</span>
+        <div>El Auditor tiene visibilidad <strong>transversal</strong> del sistema para fines de cumplimiento y trazabilidad, pero <strong>no puede ejecutar ninguna acción de escritura</strong>. Todos los botones de CRUD quedan ocultos o deshabilitados.</div>
+      </div>
+      <div class="callout succ" style="margin-top:10px"><span class="ico">✅</span>
+        <div>Caso de uso típico: revisar el historial de ofertas de un evento judicial, verificar que los tiempos de apertura/cierre fueron correctos, o auditar cambios en perfiles de usuarios.</div>
+      </div>
+    </div></div>
+  </div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ VIEWER ═══════════════════════════════════════════════ -->
+<section id="r-vie" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">👁️</div>
+    <div>
+      <div class="sec-title">Perfil: Viewer &nbsp;<span class="role-pill rp-vie">Viewer</span></div>
+      <div class="sec-desc">Acceso mínimo de visualización. Perfil para observadores externos o en evaluación.</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Módulos disponibles</p>
+      <table class="tbl">
+        <thead><tr><th>Módulo</th><th>Nivel</th></tr></thead>
+        <tbody>
+          <tr><td>📋 Eventos (solo activos)</td><td><span class="tag b">👁 Ver</span></td></tr>
+          <tr><td>📊 Resultados públicos</td><td><span class="tag b">👁 Ver</span></td></tr>
+          <tr><td>Resto de módulos</td><td><span class="tag r">Sin acceso</span></td></tr>
+        </tbody>
+      </table>
+    </div></div>
+    <div class="card"><div class="card-body">
+      <div class="callout warn"><span class="ico">⚠️</span>
+        <div>El Viewer tiene la superficie de ataque más reducida. Ideal para demos, auditores externos o participantes en período de evaluación antes de asignarles un rol operativo.</div>
+      </div>
+    </div></div>
+  </div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ MATRIZ DE ACCESOS ════════════════════════════════════ -->
+<section id="s-matrix" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">📊</div>
+    <div><div class="sec-title">Matriz de accesos por rol</div>
+    <div class="sec-desc">Resumen de qué puede hacer cada rol en cada módulo</div></div>
+  </div>
+
+  <div class="matrix">
+    <table>
+      <thead>
+        <tr>
+          <th>Módulo</th>
+          <th><span class="role-pill rp-root" style="font-size:.65rem">Root</span></th>
+          <th><span class="role-pill rp-sup" style="font-size:.65rem">Supervisor</span></th>
+          <th><span class="role-pill rp-auc" style="font-size:.65rem">Auctioneer</span></th>
+          <th><span class="role-pill rp-buy" style="font-size:.65rem">Buyer</span></th>
+          <th><span class="role-pill rp-sel" style="font-size:.65rem">Seller</span></th>
+          <th><span class="role-pill rp-aud" style="font-size:.65rem">Auditor</span></th>
+          <th><span class="role-pill rp-vie" style="font-size:.65rem">Viewer</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>👥 Usuarios</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
+        <tr><td>🏢 Compañías</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
+        <tr><td>🏷️ Roles</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
+        <tr><td>🔐 Accesos</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
+        <tr><td>📋 Eventos de subasta</td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-ro"></td><td class="mx-ro"></td></tr>
+        <tr><td>⚖️ Lotes Judiciales</td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
+        <tr><td>🚗 Carga de vehículos</td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td></tr>
+        <tr><td>🛒 Vehículos para ofertar</td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td></tr>
+        <tr><td>📊 Resultados</td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-ro"></td><td class="mx-ro"></td><td class="mx-ro"></td><td class="mx-ro"></td></tr>
+        <tr><td>🧩 Módulos del sistema</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td></tr>
+        <tr><td>🎨 Tema UI</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px;font-size:.78rem;color:var(--gray)">
+    <span><strong class="mx-yes"></strong> CRUD completo</span>
+    <span><strong class="mx-ro"></strong> Solo lectura</span>
+    <span><strong class="mx-no"></strong> Sin acceso</span>
+  </div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ SEGURIDAD ════════════════════════════════════════════ -->
+<section id="s-security" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">🔒</div>
+    <div><div class="sec-title">Referencia de seguridad</div>
+    <div class="sec-desc">Características de seguridad implementadas y validadas en producción local</div></div>
+  </div>
+
+  <div class="sec-grid" style="margin-bottom:24px">
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">JWT HS256</div><div class="sec-desc">Expiración configurable, <code>tokenVersion</code> en BD</div></div></div>
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">OTP / TOTP (RFC 6238)</div><div class="sec-desc">Google Authenticator, Authy y compatibles</div></div></div>
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">Bloqueo 3 intentos</div><div class="sec-desc">Código 423 + tiempo de espera</div></div></div>
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">Desbloqueo por reset</div><div class="sec-desc">Reset de contraseña libera bloqueo</div></div></div>
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">Invalidación por rotación</div><div class="sec-desc">Cambio de contraseña revoca sesiones</div></div></div>
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">Cambio obligatorio 1er ingreso</div><div class="sec-desc">Flag <code>first_login</code> en <code>r_user</code></div></div></div>
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">Token de un solo uso</div><div class="sec-desc">SHA-256, TTL 1h, eliminado tras uso</div></div></div>
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">CSRF Protection</div><div class="sec-desc">Cookie + header sincronizado</div></div></div>
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">Rate Limiting</div><div class="sec-desc">Por IP en endpoints de auth</div></div></div>
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">Validación Zod</div><div class="sec-desc">Todos los endpoints con schema</div></div></div>
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">XSS Prevention</div><div class="sec-desc">DOM rendering sin <code>innerHTML</code></div></div></div>
+    <div class="sec-item"><span class="sec-ok">✅</span><div><div class="sec-name">Ownership middleware</div><div class="sec-desc">Acceso restringido por compañía</div></div></div>
+  </div>
+
+  <div class="card"><div class="card-body">
+    <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Pruebas automatizadas — todas PASS</p>
+    <table class="tbl">
+      <thead><tr><th>Archivo</th><th>Cobertura</th><th>Estado</th></tr></thead>
+      <tbody>
+        <tr><td><code>tests/auth.lockout.test.js</code></td><td>Bloqueo en 3er intento, código 423</td><td><span class="tag g">PASS</span></td></tr>
+        <tr><td><code>tests/auth.service.test.js</code></td><td>Login, OTP, cambio de contraseña</td><td><span class="tag g">PASS</span></td></tr>
+        <tr><td><code>tests/common.utils.test.js</code></td><td>Selección de credencial vigente</td><td><span class="tag g">PASS</span></td></tr>
+        <tr><td><code>tests/frontend-security-lint.test.js</code></td><td>Lint XSS en frontend</td><td><span class="tag g">PASS</span></td></tr>
+        <tr><td><code>tests/security.test.js</code></td><td>OWASP Top 10 (15 pruebas)</td><td><span class="tag g">PASS</span></td></tr>
+        <tr><td><code>tests/ownership.middleware.test.js</code></td><td>Aislamiento de datos por compañía</td><td><span class="tag g">PASS</span></td></tr>
+        <tr><td><code>tests/auth.middleware.test.js</code></td><td>JWT validation, token revocation</td><td><span class="tag g">PASS</span></td></tr>
+      </tbody>
+    </table>
+  </div></div>
+</section>
+
+</main>
+
+<footer class="footer">
+  <strong>ShowDeal</strong> · Manual de Funcionalidad v2.0 · 18 junio 2026 · 7 roles documentados
+</footer>
+
+<!-- lightbox -->
+<div id="lb" onclick="closeLb()">
+  <button id="lb-x" onclick="closeLb()">✕</button>
+  <img id="lb-img" src="" alt="" onclick="event.stopPropagation()"/>
+</div>
+
+<!-- scroll top -->
+<button id="stb" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Volver arriba">▲</button>
+
+<script>
+function lb(src){document.getElementById('lb-img').src=src;document.getElementById('lb').classList.add('open');document.body.style.overflow='hidden'}
+function closeLb(){document.getElementById('lb').classList.remove('open');document.body.style.overflow=''}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeLb()});
+
+const stb=document.getElementById('stb');
+window.addEventListener('scroll',()=>stb.classList.toggle('show',scrollY>400));
+
+const secs=document.querySelectorAll('section[id]');
+const navs=document.querySelectorAll('.nav-link[href^="#"]');
+new IntersectionObserver(es=>{
+  es.forEach(e=>{
+    if(e.isIntersecting){
+      navs.forEach(l=>l.classList.remove('active'));
+      const a=document.querySelector(`.nav-link[href="#${e.target.id}"]`);
+      if(a)a.classList.add('active');
+    }
+  });
+},{rootMargin:'-30% 0px -60% 0px'}).observe&&secs.forEach(s=>new IntersectionObserver(es=>{
+  es.forEach(e=>{if(e.isIntersecting){navs.forEach(l=>l.classList.remove('active'));const a=document.querySelector(`.nav-link[href="#${e.target.id}"]`);if(a)a.classList.add('active');}});
+},{rootMargin:'-30% 0px -60% 0px'}).observe(s));
+</script>
+</body>
+</html>
