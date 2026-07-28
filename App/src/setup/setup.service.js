@@ -34,6 +34,10 @@ function quoteIdentifier(text) {
   return `"${String(text).replace(/"/g, '""')}"`;
 }
 
+function quoteLiteral(text) {
+  return `'${String(text).replace(/'/g, "''")}'`;
+}
+
 function buildUin(prefix) {
   return `${prefix}-${Date.now()}`;
 }
@@ -155,13 +159,11 @@ async function createDatabaseInfrastructure(cfg) {
 
     if (roleExists.rowCount === 0) {
       await installerClient.query(
-        `CREATE ROLE ${quoteIdentifier(cfg.appDbUser)} WITH LOGIN PASSWORD $1`,
-        [cfg.appDbPassword]
+        `CREATE ROLE ${quoteIdentifier(cfg.appDbUser)} WITH LOGIN PASSWORD ${quoteLiteral(cfg.appDbPassword)}`
       );
     } else {
       await installerClient.query(
-        `ALTER ROLE ${quoteIdentifier(cfg.appDbUser)} WITH LOGIN PASSWORD $1`,
-        [cfg.appDbPassword]
+        `ALTER ROLE ${quoteIdentifier(cfg.appDbUser)} WITH LOGIN PASSWORD ${quoteLiteral(cfg.appDbPassword)}`
       );
     }
 
