@@ -139,9 +139,11 @@ function mapAuctionResolutionRow(auction) {
     ? summary.resolution.winner
     : null;
   const assetAdditional = jsonClone(auction?.r_asset?.additional);
+  const eventAdditional = jsonClone(auction?.r_event?.additional);
   const assetBrand = getStringFromAdditional(assetAdditional, ["brand", "marca", "make"]);
   const assetModel = getStringFromAdditional(assetAdditional, ["model", "modelo"]);
   const eventStatus = resolveEventStatus(auction?.r_event);
+  const lotType = String(eventAdditional.lot_type || "").trim().toUpperCase();
 
   return {
     id_auction: auction.id_auction,
@@ -153,6 +155,9 @@ function mapAuctionResolutionRow(auction) {
     asset_status: auction.r_asset?.status || null,
     id_event: auction.id_event,
     tp_auction: auction.tp_auction,
+    lot_name: eventAdditional.lot_name || null,
+    lot_type: lotType || null,
+    lot_stage: eventAdditional.lot_stage || null,
     event_type: auction.r_event?.tp_event || null,
     event_status: eventStatus,
     event_start_at: auction.r_event?.start_at || null,
@@ -1451,6 +1456,7 @@ router.get(
               start_at: true,
               end_at: true,
               is_active: true,
+              additional: true,
             },
           },
           r_bid: {

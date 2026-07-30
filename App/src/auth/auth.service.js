@@ -234,12 +234,15 @@ function normalizeUserRecord(row) {
   const roleName = row.r_role?.role || row.role || null;
   const roleAdditional = row.r_role?.additional || row.role_additional || null;
   const isAdmin = roleAdditional?.is_admin === true;
+  const roleLabel = String(roleName || "").trim().toLowerCase();
+  const isAuctioneer = roleAdditional?.is_auctioneer === true || roleLabel.includes("auctioneer");
 
   return {
     ...row,
     login,
     roleName,
     isAdmin,
+    isAuctioneer,
   };
 }
 
@@ -254,6 +257,7 @@ function buildUserPayload(row) {
     id_company: user.id_company,
     id_role: user.id_role,
     isAdmin: user.isAdmin || false,
+    isAuctioneer: user.isAuctioneer || false,
   };
 }
 
@@ -522,6 +526,7 @@ async function login({ user, password }) {
     roleId: toJwtSafe(dbUser.id_role),
     roleName: dbUser.roleName,
     isAdmin: dbUser.isAdmin === true,
+    isAuctioneer: dbUser.isAuctioneer === true,
     tokenVersion: getTokenVersion(dbUser.additional),
   });
 
@@ -586,6 +591,7 @@ async function verifyOtp({ challengeToken, otp }) {
     roleId: toJwtSafe(u.id_role),
     roleName: u.roleName,
     isAdmin: u.isAdmin === true,
+    isAuctioneer: u.isAuctioneer === true,
     amr: ["pwd", "totp"],
     tokenVersion: getTokenVersion(u.additional),
   });

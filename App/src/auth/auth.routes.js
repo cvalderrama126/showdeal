@@ -455,8 +455,16 @@ router.get("/permissions", requireAuth, async (req, res, next) => {
       roleId: BigInt(String(roleId)),
       moduleNames: modules,
       isAdmin: req.auth?.isAdmin === true,
+      roleName: req.auth?.roleName || "",
     });
-    return res.json(jsonSafe({ ok: true, isAdmin: req.auth?.isAdmin === true, roleName, isBuyer, data }));
+    return res.json(jsonSafe({
+      ok: true,
+      isAdmin: req.auth?.isAdmin === true,
+      isAuctioneer: req.auth?.isAuctioneer === true || String(roleName).toLowerCase().includes("auctioneer"),
+      roleName,
+      isBuyer,
+      data,
+    }));
   } catch (err) {
     return next(err);
   }

@@ -10,6 +10,9 @@ async function init_r_auction_resolution() {
   let currentPage = 1;
   const PAGE_SIZE = 8;
   let isAutoResolving = false;
+  const JUDICIAL_LOT_TYPE = "JUDICIAL_LOT";
+  let renderTimer = null;
+  let chartRenderToken = 0;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -55,6 +58,19 @@ async function init_r_auction_resolution() {
     };
     const key = String(type || "").toUpperCase();
     return labels[key] || firstText(type, "Sin tipo");
+  }
+
+  function lotTypeLabel(type) {
+    const key = String(type || "").toUpperCase();
+    if (key === JUDICIAL_LOT_TYPE) return "Judicial";
+    if (!key) return "Sin tipo";
+    return key.replaceAll("_", " ");
+  }
+
+  function lotLabel(row) {
+    const name = firstText(row?.lot_name, `Lote #${row?.id_event || "-"}`);
+    const stage = firstText(row?.lot_stage, row?.lot_type);
+    return stage && stage !== "-" ? `${name} · ${lotTypeLabel(stage)}` : name;
   }
 
   function eventStatusBadge(status) {
@@ -201,43 +217,47 @@ async function init_r_auction_resolution() {
     host.innerHTML = `<div id="${chartContainerId}"></div>`;
     destroyChart(hostId);
 
-    const chart = new window.ApexCharts(document.getElementById(chartContainerId), {
-      chart: {
-        type: "bar",
-        height: Number(options.height || 220),
-        toolbar: { show: false },
-        animations: { enabled: true, speed: 350 },
-      },
-      series: [{ data: seriesItems.map((item) => Number(item.value || 0)) }],
-      xaxis: {
-        categories: seriesItems.map((item) => String(item.label || "Sin dato")),
-        labels: { style: { fontSize: "10px" } },
-      },
-      yaxis: {
-        labels: { style: { fontSize: "10px" } },
-      },
-      plotOptions: {
-        bar: {
-          borderRadius: 4,
-          horizontal: options.horizontal === true,
-          columnWidth: "45%",
-          distributed: true,
+    try {
+      const chart = new window.ApexCharts(document.getElementById(chartContainerId), {
+        chart: {
+          type: "bar",
+          height: Number(options.height || 220),
+          toolbar: { show: false },
+          animations: { enabled: true, speed: 350 },
         },
-      },
-      dataLabels: { enabled: false },
-      legend: { show: false },
-      grid: { strokeDashArray: 3, padding: { left: 0, right: 0 } },
-      tooltip: {
-        y: {
-          formatter: (value) => `${value}`,
+        series: [{ data: seriesItems.map((item) => Number(item.value || 0)) }],
+        xaxis: {
+          categories: seriesItems.map((item) => String(item.label || "Sin dato")),
+          labels: { style: { fontSize: "10px" } },
         },
-      },
-      theme: { monochrome: { enabled: false } },
-      colors: ["#2f6fdb", "#20a4f3", "#00b894", "#f6bd60", "#e76f51", "#8d99ae", "#3a86ff", "#8338ec"],
-    });
+        yaxis: {
+          labels: { style: { fontSize: "10px" } },
+        },
+        plotOptions: {
+          bar: {
+            borderRadius: 4,
+            horizontal: options.horizontal === true,
+            columnWidth: "45%",
+            distributed: true,
+          },
+        },
+        dataLabels: { enabled: false },
+        legend: { show: false },
+        grid: { strokeDashArray: 3, padding: { left: 0, right: 0 } },
+        tooltip: {
+          y: {
+            formatter: (value) => `${value}`,
+          },
+        },
+        theme: { monochrome: { enabled: false } },
+        colors: ["#2f6fdb", "#20a4f3", "#00b894", "#f6bd60", "#e76f51", "#8d99ae", "#3a86ff", "#8338ec"],
+      });
 
-    await chart.render();
-    chartInstances.set(hostId, chart);
+      await chart.render();
+      chartInstances.set(hostId, chart);
+    } catch {
+      renderMiniChartFallback(hostId, seriesItems);
+    }
   }
 
   async function renderApexArea(hostId, items) {
@@ -255,39 +275,43 @@ async function init_r_auction_resolution() {
     host.innerHTML = `<div id="${chartContainerId}"></div>`;
     destroyChart(hostId);
 
-    const chart = new window.ApexCharts(document.getElementById(chartContainerId), {
-      chart: {
-        type: "area",
-        height: 220,
-        toolbar: { show: false },
-        animations: { enabled: true, speed: 350 },
-      },
-      series: [{ name: "Subastas", data: seriesItems.map((item) => Number(item.value || 0)) }],
-      xaxis: {
-        categories: seriesItems.map((item) => String(item.label || "Sin fecha")),
-        labels: { style: { fontSize: "10px" } },
-      },
-      yaxis: {
-        labels: { style: { fontSize: "10px" } },
-      },
-      dataLabels: { enabled: false },
-      stroke: { curve: "smooth", width: 2 },
-      fill: {
-        type: "gradient",
-        gradient: {
-          shadeIntensity: 0.3,
-          opacityFrom: 0.6,
-          opacityTo: 0.15,
-          stops: [0, 90, 100],
+    try {
+      const chart = new window.ApexCharts(document.getElementById(chartContainerId), {
+        chart: {
+          type: "area",
+          height: 220,
+          toolbar: { show: false },
+          animations: { enabled: true, speed: 350 },
         },
-      },
-      colors: ["#2f6fdb"],
-      legend: { show: false },
-      grid: { strokeDashArray: 3, padding: { left: 0, right: 0 } },
-    });
+        series: [{ name: "Subastas", data: seriesItems.map((item) => Number(item.value || 0)) }],
+        xaxis: {
+          categories: seriesItems.map((item) => String(item.label || "Sin fecha")),
+          labels: { style: { fontSize: "10px" } },
+        },
+        yaxis: {
+          labels: { style: { fontSize: "10px" } },
+        },
+        dataLabels: { enabled: false },
+        stroke: { curve: "smooth", width: 2 },
+        fill: {
+          type: "gradient",
+          gradient: {
+            shadeIntensity: 0.3,
+            opacityFrom: 0.6,
+            opacityTo: 0.15,
+            stops: [0, 90, 100],
+          },
+        },
+        colors: ["#2f6fdb"],
+        legend: { show: false },
+        grid: { strokeDashArray: 3, padding: { left: 0, right: 0 } },
+      });
 
-    await chart.render();
-    chartInstances.set(hostId, chart);
+      await chart.render();
+      chartInstances.set(hostId, chart);
+    } catch {
+      renderMiniChartFallback(hostId, seriesItems);
+    }
   }
 
   async function renderApexDonut(hostId, items) {
@@ -305,28 +329,32 @@ async function init_r_auction_resolution() {
     host.innerHTML = `<div id="${chartContainerId}"></div>`;
     destroyChart(hostId);
 
-    const chart = new window.ApexCharts(document.getElementById(chartContainerId), {
-      chart: {
-        type: "donut",
-        height: 220,
-        toolbar: { show: false },
-      },
-      labels: seriesItems.map((item) => String(item.label || "Sin dato")),
-      series: seriesItems.map((item) => Number(item.value || 0)),
-      legend: {
-        position: "bottom",
-        fontSize: "11px",
-      },
-      dataLabels: {
-        enabled: true,
-        style: { fontSize: "10px" },
-      },
-      stroke: { width: 1 },
-      colors: ["#2f6fdb", "#20a4f3", "#00b894", "#f6bd60", "#e76f51", "#8d99ae", "#3a86ff", "#8338ec"],
-    });
+    try {
+      const chart = new window.ApexCharts(document.getElementById(chartContainerId), {
+        chart: {
+          type: "donut",
+          height: 220,
+          toolbar: { show: false },
+        },
+        labels: seriesItems.map((item) => String(item.label || "Sin dato")),
+        series: seriesItems.map((item) => Number(item.value || 0)),
+        legend: {
+          position: "bottom",
+          fontSize: "11px",
+        },
+        dataLabels: {
+          enabled: true,
+          style: { fontSize: "10px" },
+        },
+        stroke: { width: 1 },
+        colors: ["#2f6fdb", "#20a4f3", "#00b894", "#f6bd60", "#e76f51", "#8d99ae", "#3a86ff", "#8338ec"],
+      });
 
-    await chart.render();
-    chartInstances.set(hostId, chart);
+      await chart.render();
+      chartInstances.set(hostId, chart);
+    } catch {
+      renderMiniChartFallback(hostId, seriesItems);
+    }
   }
 
   function computeStats(rows) {
@@ -410,11 +438,84 @@ async function init_r_auction_resolution() {
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div>
           <h4 class="mb-1">Resultados de subastas</h4>
-          <div class="sd-muted">Consulta el resultado de cada subasta de oferta unica. Las pendientes se adjudican automaticamente con la regla de mayor oferta y desempate por primera oferta.</div>
+          <div class="sd-muted">Consulta el resultado de cada subasta de oferta unica. Puedes filtrar por lotes judiciales para que la grilla y los gráficos muestren solo ese subconjunto.</div>
         </div>
         <button class="btn btn-sd-outline btn-sm" id="btnAuctionResolutionRefresh">Refrescar</button>
       </div>
       <div id="auctionResolutionAlert"></div>
+
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <button
+          id="btnToggleGridFilters"
+          class="btn btn-sd-outline btn-sm"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#auctionGridFiltersPanel"
+          aria-expanded="false"
+          aria-controls="auctionGridFiltersPanel"
+        >
+          Filtros
+        </button>
+      </div>
+
+      <div class="collapse" id="auctionGridFiltersPanel">
+        <div class="sd-card border p-3 mb-3">
+          <div class="row g-2 align-items-end">
+            <div class="col-sm-6 col-lg-3">
+              <label class="form-label small mb-1">Placa / UIN</label>
+              <input type="text" class="form-control form-control-sm" id="filterPlate" placeholder="Ej. SEALED-ASSET" />
+            </div>
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label small mb-1">Fecha desde</label>
+              <input type="date" class="form-control form-control-sm" id="filterDateFrom" />
+            </div>
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label small mb-1">Fecha hasta</label>
+              <input type="date" class="form-control form-control-sm" id="filterDateTo" />
+            </div>
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label small mb-1">Usuario</label>
+              <select class="form-select form-select-sm" id="filterUser"><option value="">Todos</option></select>
+            </div>
+            <div class="col-sm-6 col-lg-2">
+              <label class="form-label small mb-1">Empresa</label>
+              <select class="form-select form-select-sm" id="filterCompany"><option value="">Todas</option></select>
+            </div>
+            <div class="col-sm-6 col-lg-1 d-grid">
+              <button class="btn btn-sd-outline btn-sm" id="btnClearFilters">Limpiar</button>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+              <label class="form-label small mb-1">Tipo de lote</label>
+              <select class="form-select form-select-sm" id="filterLotType">
+                <option value="">Todos</option>
+                <option value="JUDICIAL_LOT">Solo judiciales</option>
+                <option value="NON_JUDICIAL">No judiciales</option>
+              </select>
+            </div>
+            <div class="col-sm-6 col-lg-4">
+              <label class="form-label small mb-1">Lote</label>
+              <select class="form-select form-select-sm" id="filterLotId">
+                <option value="">Todos</option>
+              </select>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+              <label class="form-label small mb-1">Tipo de evento</label>
+              <select class="form-select form-select-sm" id="filterEventType"><option value="">Todos</option></select>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+              <label class="form-label small mb-1">Estado del evento</label>
+              <select class="form-select form-select-sm" id="filterEventStatus">
+                <option value="">Todos</option>
+                <option value="LIVE">En curso</option>
+                <option value="SCHEDULED">Programado</option>
+                <option value="FINISHED">Finalizado</option>
+                <option value="INACTIVE">Inactivo</option>
+                <option value="NO_EVENT">Sin evento</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <ul class="nav nav-tabs mb-3" id="auctionResultTabs" role="tablist">
         <li class="nav-item" role="presentation">
@@ -463,6 +564,12 @@ async function init_r_auction_resolution() {
               <div class="sd-mini-card">
                 <div class="sd-mini-title">Tipo de evento</div>
                 <div id="chartEventType"></div>
+              </div>
+            </div>
+            <div class="col-12 col-lg-6 col-xl-4">
+              <div class="sd-mini-card">
+                <div class="sd-mini-title">Tipo de lote</div>
+                <div id="chartLotType"></div>
               </div>
             </div>
             <div class="col-12 col-lg-6 col-xl-4">
@@ -517,65 +624,6 @@ async function init_r_auction_resolution() {
         </div>
 
         <div class="tab-pane fade" id="tabGrid" role="tabpanel" aria-labelledby="tabGridBtn" tabindex="0">
-          <div class="d-flex justify-content-between align-items-center mb-2">
-            <button
-              id="btnToggleGridFilters"
-              class="btn btn-sd-outline btn-sm"
-              type="button"
-              data-bs-toggle="collapse"
-              data-bs-target="#auctionGridFiltersPanel"
-              aria-expanded="false"
-              aria-controls="auctionGridFiltersPanel"
-            >
-              Filtros
-            </button>
-          </div>
-
-          <div class="collapse" id="auctionGridFiltersPanel">
-            <div class="sd-card border p-3 mb-3">
-              <div class="row g-2 align-items-end">
-                <div class="col-sm-6 col-lg-3">
-                  <label class="form-label small mb-1">Placa / UIN</label>
-                  <input type="text" class="form-control form-control-sm" id="filterPlate" placeholder="Ej. SEALED-ASSET" />
-                </div>
-                <div class="col-sm-6 col-lg-2">
-                  <label class="form-label small mb-1">Fecha desde</label>
-                  <input type="date" class="form-control form-control-sm" id="filterDateFrom" />
-                </div>
-                <div class="col-sm-6 col-lg-2">
-                  <label class="form-label small mb-1">Fecha hasta</label>
-                  <input type="date" class="form-control form-control-sm" id="filterDateTo" />
-                </div>
-                <div class="col-sm-6 col-lg-2">
-                  <label class="form-label small mb-1">Usuario</label>
-                  <select class="form-select form-select-sm" id="filterUser"><option value="">Todos</option></select>
-                </div>
-                <div class="col-sm-6 col-lg-2">
-                  <label class="form-label small mb-1">Empresa</label>
-                  <select class="form-select form-select-sm" id="filterCompany"><option value="">Todas</option></select>
-                </div>
-                <div class="col-sm-6 col-lg-1 d-grid">
-                  <button class="btn btn-sd-outline btn-sm" id="btnClearFilters">Limpiar</button>
-                </div>
-                <div class="col-sm-6 col-lg-3">
-                  <label class="form-label small mb-1">Tipo de evento</label>
-                  <select class="form-select form-select-sm" id="filterEventType"><option value="">Todos</option></select>
-                </div>
-                <div class="col-sm-6 col-lg-3">
-                  <label class="form-label small mb-1">Estado del evento</label>
-                  <select class="form-select form-select-sm" id="filterEventStatus">
-                    <option value="">Todos</option>
-                    <option value="LIVE">En curso</option>
-                    <option value="SCHEDULED">Programado</option>
-                    <option value="FINISHED">Finalizado</option>
-                    <option value="INACTIVE">Inactivo</option>
-                    <option value="NO_EVENT">Sin evento</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div class="table-responsive">
             <table class="table table-sm align-middle sd-table">
               <thead>
@@ -617,6 +665,8 @@ async function init_r_auction_resolution() {
   const filterDateTo = document.getElementById("filterDateTo");
   const filterUser = document.getElementById("filterUser");
   const filterCompany = document.getElementById("filterCompany");
+  const filterLotType = document.getElementById("filterLotType");
+  const filterLotId = document.getElementById("filterLotId");
   const filterEventType = document.getElementById("filterEventType");
   const filterEventStatus = document.getElementById("filterEventStatus");
   const btnClearFilters = document.getElementById("btnClearFilters");
@@ -650,10 +700,30 @@ async function init_r_auction_resolution() {
     const users = [...new Set(rows.map((row) => firstText(getWinner(row)?.user, getWinner(row)?.name)).filter((item) => item !== "-"))].sort();
     const companies = [...new Set(rows.map((row) => firstText(getWinner(row)?.company_name, row.winner_company_name)).filter((item) => item !== "-"))].sort();
     const eventTypes = [...new Set(rows.map((row) => firstText(row.event_type)).filter((item) => item !== "-"))].sort();
+    const lots = [...new Map(
+      rows
+        .filter((row) => String(row.lot_type || "").toUpperCase() === JUDICIAL_LOT_TYPE)
+        .map((row) => [String(row.id_event || ""), row])
+        .filter(([idEvent]) => !!idEvent)
+    ).values()].sort((left, right) => Number(left.id_event) - Number(right.id_event));
 
     fillSelectOptions(filterUser, users, "Todos");
     fillSelectOptions(filterCompany, companies, "Todas");
     fillSelectOptions(filterEventType, eventTypes, "Todos", eventTypeLabel);
+    if (filterLotType) {
+      filterLotType.value = filterLotType.value || JUDICIAL_LOT_TYPE;
+    }
+    if (filterLotId) {
+      const currentValue = String(filterLotId.value || "").trim();
+      filterLotId.innerHTML = [
+        '<option value="">Todos</option>',
+        ...lots.map((row) => {
+          const value = String(row.id_event || "");
+          return `<option value="${escapeHtml(value)}">${escapeHtml(lotLabel(row))}</option>`;
+        }),
+      ].join("");
+      filterLotId.value = currentValue;
+    }
     updateFilterToggleLabel();
   }
 
@@ -666,6 +736,8 @@ async function init_r_auction_resolution() {
       normalizeText(filterDateTo?.value),
       normalizeText(filterUser?.value),
       normalizeText(filterCompany?.value),
+      normalizeText(filterLotType?.value),
+      normalizeText(filterLotId?.value),
       normalizeText(filterEventType?.value),
       normalizeText(filterEventStatus?.value),
     ].filter(Boolean).length;
@@ -681,6 +753,8 @@ async function init_r_auction_resolution() {
     const toStamp = toDateStamp(filterDateTo?.value);
     const userFilter = normalizeText(filterUser?.value);
     const companyFilter = normalizeText(filterCompany?.value);
+    const lotTypeFilter = normalizeText(filterLotType?.value);
+    const lotIdFilter = normalizeText(filterLotId?.value);
     const eventTypeFilter = normalizeText(filterEventType?.value);
     const eventStatusFilter = normalizeText(filterEventStatus?.value);
 
@@ -689,6 +763,8 @@ async function init_r_auction_resolution() {
       const plate = normalizeText(row.asset_uin);
       const winnerUser = normalizeText(firstText(winner?.user, winner?.name));
       const winnerCompany = normalizeText(firstText(winner?.company_name, row.winner_company_name));
+      const lotType = normalizeText(row.lot_type);
+      const lotId = normalizeText(row.id_event);
       const eventType = normalizeText(row.event_type);
       const eventStatus = normalizeText(row.event_status);
       const eventDate = toDateStamp(row.event_start_at);
@@ -696,6 +772,9 @@ async function init_r_auction_resolution() {
       if (plateFilter && !plate.includes(plateFilter)) return false;
       if (userFilter && winnerUser !== userFilter) return false;
       if (companyFilter && winnerCompany !== companyFilter) return false;
+      if (lotTypeFilter === normalizeText(JUDICIAL_LOT_TYPE) && lotType !== normalizeText(JUDICIAL_LOT_TYPE)) return false;
+      if (lotTypeFilter === "non_judicial" && lotType === normalizeText(JUDICIAL_LOT_TYPE)) return false;
+      if (lotIdFilter && lotId !== lotIdFilter) return false;
       if (eventTypeFilter && eventType !== eventTypeFilter) return false;
       if (eventStatusFilter && eventStatus !== eventStatusFilter) return false;
       if (fromStamp !== null && eventDate !== null && eventDate < fromStamp) return false;
@@ -707,7 +786,9 @@ async function init_r_auction_resolution() {
   }
 
   async function renderCharts(rows) {
+    const renderToken = ++chartRenderToken;
     const eventData = distribution(rows, (row) => eventTypeLabel(row.event_type));
+    const lotTypeData = distribution(rows, (row) => lotTypeLabel(row.lot_type));
     const assetData = distribution(rows, (row) => row.asset_type || "Sin tipo");
     const eventStatusData = distribution(rows, (row) => eventStatusLabel(row.event_status));
     const brandData = distribution(rows, (row) => row.asset_brand || "Sin marca");
@@ -730,18 +811,31 @@ async function init_r_auction_resolution() {
     );
 
     try {
+      if (renderToken !== chartRenderToken) return;
       await loadApexCharts();
+      if (renderToken !== chartRenderToken) return;
       await renderApexBars("chartEventType", eventData, { horizontal: true });
+      if (renderToken !== chartRenderToken) return;
+      await renderApexBars("chartLotType", lotTypeData, { horizontal: true });
+      if (renderToken !== chartRenderToken) return;
       await renderApexBars("chartAssetType", assetData, { horizontal: true });
+      if (renderToken !== chartRenderToken) return;
       await renderApexDonut("chartEventStatus", eventStatusData);
+      if (renderToken !== chartRenderToken) return;
       await renderApexBars("chartBrand", brandData, { horizontal: true });
+      if (renderToken !== chartRenderToken) return;
       await renderApexBars("chartModel", modelData, { horizontal: true });
+      if (renderToken !== chartRenderToken) return;
       await renderApexArea("chartDate", dateData);
+      if (renderToken !== chartRenderToken) return;
       await renderApexDonut("chartAuctionState", auctionStateData);
+      if (renderToken !== chartRenderToken) return;
       await renderApexBars("chartWinnerCompany", winnerCompanyData, { horizontal: true });
+      if (renderToken !== chartRenderToken) return;
       await renderApexBars("chartWinnerUser", winnerUserData, { horizontal: true });
     } catch (_err) {
       renderMiniChartFallback("chartEventType", eventData);
+      renderMiniChartFallback("chartLotType", lotTypeData);
       renderMiniChartFallback("chartAssetType", assetData);
       renderMiniChartFallback("chartEventStatus", eventStatusData);
       renderMiniChartFallback("chartBrand", brandData);
@@ -927,6 +1021,16 @@ async function init_r_auction_resolution() {
     renderGrid(filtered);
   }
 
+  function scheduleApplyAndRender() {
+    if (renderTimer) {
+      clearTimeout(renderTimer);
+    }
+    renderTimer = setTimeout(() => {
+      renderTimer = null;
+      applyAndRender();
+    }, 80);
+  }
+
   async function autoResolvePendingAuctions(rows) {
     const pendingRows = (Array.isArray(rows) ? rows : []).filter(
       (row) => row.resolved !== true && Number(row.bid_count || 0) > 0
@@ -999,10 +1103,10 @@ async function init_r_auction_resolution() {
     }
   });
 
-  [filterPlate, filterDateFrom, filterDateTo, filterUser, filterCompany, filterEventType, filterEventStatus]
+  [filterPlate, filterDateFrom, filterDateTo, filterUser, filterCompany, filterLotType, filterLotId, filterEventType, filterEventStatus]
     .forEach((control) => {
-      control?.addEventListener("input", applyAndRender);
-      control?.addEventListener("change", applyAndRender);
+      control?.addEventListener("input", scheduleApplyAndRender);
+      control?.addEventListener("change", scheduleApplyAndRender);
     });
 
   btnClearFilters?.addEventListener("click", () => {
@@ -1011,10 +1115,12 @@ async function init_r_auction_resolution() {
     if (filterDateTo) filterDateTo.value = "";
     if (filterUser) filterUser.value = "";
     if (filterCompany) filterCompany.value = "";
+    if (filterLotType) filterLotType.value = JUDICIAL_LOT_TYPE;
+    if (filterLotId) filterLotId.value = "";
     if (filterEventType) filterEventType.value = "";
     if (filterEventStatus) filterEventStatus.value = "";
     updateFilterToggleLabel();
-    applyAndRender();
+    scheduleApplyAndRender();
   });
 
   btnGridPrev?.addEventListener("click", () => {

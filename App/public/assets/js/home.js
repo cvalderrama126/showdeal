@@ -491,6 +491,7 @@
     const response = await window.SD_API.request(`/auth/permissions?modules=${encodeURIComponent(modules.join(","))}`);
     window.SD_USER = {
       isAdmin: response?.isAdmin === true,
+      isAuctioneer: response?.isAuctioneer === true,
       isBuyer: response?.isBuyer === true,
       roleName: response?.roleName || "",
     };
@@ -501,8 +502,10 @@
     const readableModules = [];
     const allModules = [];
     const isAdmin = window.SD_USER?.isAdmin === true;
+    const isAuctioneer = window.SD_USER?.isAuctioneer === true;
     const isBuyer = window.SD_USER?.isBuyer === true;
     const buyerAllowedModules = new Set(["r_buyer_offer"]);
+    const auctioneerBlockedModules = new Set(["r_module", "r_role", "r_access"]);
 
     getMenuItems().forEach((item) => {
       const moduleName = item.getAttribute("data-module");
@@ -512,7 +515,8 @@
       const onlyBuyer = item.getAttribute("data-only-buyer") === "1";
       const buyerBlocked = window.SD_USER?.isBuyer === true && moduleName === "r_asset";
       const buyerRoleAllowed = !isBuyer || buyerAllowedModules.has(moduleName);
-      const roleAllowed = (!onlyAdmin || isAdmin) && (!onlyBuyer || !isAdmin) && !buyerBlocked && buyerRoleAllowed;
+      const auctioneerBlocked = isAuctioneer && auctioneerBlockedModules.has(moduleName);
+      const roleAllowed = (!onlyAdmin || isAdmin || isAuctioneer) && (!onlyBuyer || !isAdmin) && !buyerBlocked && buyerRoleAllowed && !auctioneerBlocked;
 
       item.hidden = roleAllowed === false;
       item.classList.remove("active");

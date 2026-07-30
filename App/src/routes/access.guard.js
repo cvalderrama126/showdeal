@@ -30,6 +30,19 @@ function allowWhenAccessMissing() {
   return false;
 }
 
+function isAuctioneerRoleName(roleName) {
+  const value = String(roleName || "").trim().toLowerCase();
+  return value.includes("auctioneer");
+}
+
+function isPrivilegedOperator(auth) {
+  return auth?.isAdmin === true || auth?.isAuctioneer === true || isAuctioneerRoleName(auth?.roleName);
+}
+
+function isRestrictedAuctioneerModule(moduleName) {
+  return ["r_module", "r_role", "r_access"].includes(String(moduleName || "").trim());
+}
+
 function isBuyerUiModuleAllowed(moduleName) {
   return moduleName === "r_buyer_offer";
 }
@@ -67,7 +80,7 @@ async function getActiveModules(moduleNames) {
   return cleanNames.length ? rows : [];
 }
 
-async function getModulePermissions({ roleId, moduleNames, isAdmin = false }) {
+async function getModulePermissions({ roleId, moduleNames, isAdmin = false, roleName = "" }) {
   const cleanNames = Array.from(
     new Set(
       (Array.isArray(moduleNames) ? moduleNames : [])
@@ -75,6 +88,8 @@ async function getModulePermissions({ roleId, moduleNames, isAdmin = false }) {
         .filter(Boolean)
     )
   );
+
+  const auctioneerMode = isAuctioneerRoleName(roleName);
 
   if (isAdmin === true) {
     const permissions = {};
@@ -121,6 +136,28 @@ async function getModulePermissions({ roleId, moduleNames, isAdmin = false }) {
   const permissions = {};
 
   for (const moduleName of cleanNames) {
+    if (auctioneerMode && isRestrictedAuctioneerModule(moduleName)) {
+      permissions[moduleName] = {
+        configured: false,
+        read: false,
+        create: false,
+        update: false,
+        delete: false,
+      };
+      continue;
+    }
+
+    if (auctioneerMode) {
+      permissions[moduleName] = {
+        configured: true,
+        read: true,
+        create: true,
+        update: true,
+        delete: true,
+      };
+      continue;
+    }
+
     if (buyerRole && !isBuyerUiModuleAllowed(moduleName)) {
       permissions[moduleName] = {
         configured: true,
@@ -174,7 +211,12 @@ async function getModulePermissions({ roleId, moduleNames, isAdmin = false }) {
 function requireModuleAccess(moduleName, action) {
   return async function moduleAccessGuard(req, res, next) {
     try {
-      if (req.auth?.isAdmin === true) {
+      if (isPrivilegedOperator(req.auth)) {
+        if (req.auth?.isAuctioneer === true || isAuctioneerRoleName(req.auth?.roleName)) {
+          if (isRestrictedAuctioneerModule(moduleName)) {
+            return res.status(403).json({ ok: false, error: "FORBIDDEN_AUCTIONEER_MODULE", module: moduleName });
+          }
+        }
         return next();
       }
 
