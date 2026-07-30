@@ -9,6 +9,7 @@ async function init_r_auction_resolution() {
   let apexLoadPromise = null;
   let currentPage = 1;
   const PAGE_SIZE = 8;
+  let isAutoResolving = false;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -409,7 +410,7 @@ async function init_r_auction_resolution() {
       <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <div>
           <h4 class="mb-1">Resultados de subastas</h4>
-          <div class="sd-muted">Consulta el resultado de cada subasta de oferta unica y, si aun sigue pendiente, resuelvela con la regla de mayor oferta y desempate por primera oferta.</div>
+          <div class="sd-muted">Consulta el resultado de cada subasta de oferta unica. Las pendientes se adjudican automaticamente con la regla de mayor oferta y desempate por primera oferta.</div>
         </div>
         <button class="btn btn-sd-outline btn-sm" id="btnAuctionResolutionRefresh">Refrescar</button>
       </div>
@@ -912,7 +913,6 @@ async function init_r_auction_resolution() {
         </td>
         <td class="text-end">
           <button class="btn btn-sm btn-sd-outline me-1" data-act="show-detail" data-auction-id="${escapeHtml(row.id_auction)}">Detalle</button>
-          <button class="btn btn-sm btn-sd" data-act="resolve-auction" data-auction-id="${escapeHtml(row.id_auction)}" ${row.resolved ? "disabled" : ""}>${row.resolved ? "Resuelta" : "Resolver"}</button>
         </td>
       </tr>
     `).join("");
@@ -927,10 +927,54 @@ async function init_r_auction_resolution() {
     renderGrid(filtered);
   }
 
+  async function autoResolvePendingAuctions(rows) {
+    const pendingRows = (Array.isArray(rows) ? rows : []).filter(
+      (row) => row.resolved !== true && Number(row.bid_count || 0) > 0
+    );
+
+    if (!pendingRows.length || isAutoResolving) {
+      return false;
+    }
+
+    isAutoResolving = true;
+    setAlert("info", `Aplicando resolución automática para ${pendingRows.length} subasta(s) pendiente(s)...`);
+
+    let resolvedCount = 0;
+    for (const row of pendingRows) {
+      const auctionId = String(row.id_auction || "").trim();
+      if (!auctionId) continue;
+      try {
+        await window.SD_API.request(`/api/r_auction_resolution/${encodeURIComponent(auctionId)}/resolve`, {
+          method: "POST",
+        });
+        resolvedCount += 1;
+      } catch {
+        // Continue with remaining auctions; failed rows remain pending.
+      }
+    }
+
+    isAutoResolving = false;
+
+    if (resolvedCount > 0) {
+      setAlert("success", `Se resolvieron automáticamente ${resolvedCount} subasta(s).`);
+      return true;
+    }
+
+    clearAlert();
+    return false;
+  }
+
   async function loadRows() {
     setAlert("info", "Cargando resultados de subastas...");
     const response = await window.SD_API.request("/api/r_auction_resolution");
-    const rows = Array.isArray(response?.data) ? response.data : [];
+    let rows = Array.isArray(response?.data) ? response.data : [];
+
+    const resolvedAny = await autoResolvePendingAuctions(rows);
+    if (resolvedAny) {
+      const refreshed = await window.SD_API.request("/api/r_auction_resolution");
+      rows = Array.isArray(refreshed?.data) ? refreshed.data : [];
+    }
+
     rowsCache = rows;
 
     renderFilterOptions(rows);
@@ -952,33 +996,6 @@ async function init_r_auction_resolution() {
         detailsModal?.show();
       }
       return;
-    }
-
-    const button = event.target.closest("button[data-act='resolve-auction']");
-    if (!button) return;
-
-    const auctionId = String(button.getAttribute("data-auction-id") || "").trim();
-    if (!auctionId) return;
-
-    const confirmed = confirm("Se adjudicará la subasta aplicando la regla de mayor oferta y, en empate, primera oferta registrada. ¿Continuar?");
-    if (!confirmed) return;
-
-    button.disabled = true;
-    setAlert("info", `Resolviendo subasta #${auctionId}...`);
-
-    try {
-      const result = await window.SD_API.request(`/api/r_auction_resolution/${encodeURIComponent(auctionId)}/resolve`, {
-        method: "POST",
-      });
-      const winner = result?.data?.resolution?.winner || result?.data?.winner_preview;
-      setAlert(
-        "success",
-        `Subasta #${auctionId} adjudicada a ${winner?.user || winner?.name || "-"} por $ ${money(winner?.value)}.`
-      );
-      await loadRows();
-    } catch (err) {
-      setAlert("danger", err?.message || err?.error || "No se pudo resolver la subasta.");
-      button.disabled = false;
     }
   });
 

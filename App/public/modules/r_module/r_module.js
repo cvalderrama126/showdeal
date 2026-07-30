@@ -25,7 +25,7 @@ async function init_r_module() {
     title: "Módulos",
     description: "Catálogo de módulos funcionales del sistema (nombre visible + clave técnica).",
     endpoint: "/api/r_module",
-    listEndpoint: "/api/r_module?includeInactive=true&take=200",
+    listEndpoint: "/api/r_module?take=200",
     idField: "id_module",
     pageSize: 10,
     searchPlaceholder: "Buscar por nombre de modulo",

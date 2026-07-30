@@ -17,8 +17,21 @@ async function hasAccessConfig(moduleName) {
   return configuredCount > 0;
 }
 
+async function isBuyerRole(roleId) {
+  const role = await prisma.r_role.findUnique({
+    where: { id_role: roleId },
+    select: { role: true },
+  });
+  const roleName = String(role?.role || "").trim().toLowerCase();
+  return roleName.includes("buyer");
+}
+
 function allowWhenAccessMissing() {
   return false;
+}
+
+function isBuyerUiModuleAllowed(moduleName) {
+  return moduleName === "r_buyer_offer";
 }
 
 async function getActiveModules(moduleNames) {
@@ -78,6 +91,7 @@ async function getModulePermissions({ roleId, moduleNames, isAdmin = false }) {
   }
 
   const modules = await getActiveModules(cleanNames);
+  const buyerRole = await isBuyerRole(roleId);
 
   const accessRows = await prisma.r_access.findMany({
     where: {
@@ -107,6 +121,17 @@ async function getModulePermissions({ roleId, moduleNames, isAdmin = false }) {
   const permissions = {};
 
   for (const moduleName of cleanNames) {
+    if (buyerRole && !isBuyerUiModuleAllowed(moduleName)) {
+      permissions[moduleName] = {
+        configured: true,
+        read: false,
+        create: false,
+        update: false,
+        delete: false,
+      };
+      continue;
+    }
+
     const moduleInfo = moduleMap.get(moduleName) || null;
     const configured = (moduleInfo?._count?.r_access || 0) > 0;
     const access = accessMap.get(moduleName) || null;
@@ -157,6 +182,11 @@ function requireModuleAccess(moduleName, action) {
       const roleId = toBigIntOrNull(rawRoleId);
       if (roleId === null) {
         return res.status(403).json({ ok: false, error: "MISSING_ROLE" });
+      }
+
+      const buyerRole = await isBuyerRole(roleId);
+      if (buyerRole && moduleName === "r_asset") {
+        return res.status(403).json({ ok: false, error: "FORBIDDEN_BUYER_MODULE", module: moduleName });
       }
 
       const moduleInfo = await prisma.r_module.findFirst({

@@ -89,7 +89,7 @@ async function init_r_attach() {
       q: "",
       id_asset: "",
       tp_attach: "",
-      includeInactive: true,
+      includeInactive: false,
     },
     pagination: {
       take: PAGE_SIZE,

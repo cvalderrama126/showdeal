@@ -10,10 +10,17 @@ const { getModulePermissions } = require("../routes/access.guard");
 const { audit } = require("../utils/audit.service");
 const passwordResetRoutes = require("./password-reset.routes");
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const isProdEnv = process.env.NODE_ENV === "production";
+
 // ✅ RATE LIMITING PARA AUTENTICACIÓN (Security: prevent brute force)
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per window
+  windowMs: parsePositiveInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
+  max: parsePositiveInt(process.env.AUTH_RATE_LIMIT_MAX, isProdEnv ? 5 : 20),
   message: {
     ok: false,
     error: "Too many authentication attempts, try again later"
@@ -24,8 +31,8 @@ const authLimiter = rateLimit({
 
 // ✅ RATE LIMITING PARA OTP (Security: prevent brute force)
 const otpLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, // 5 minutes
-  max: 3, // 3 attempts per window
+  windowMs: parsePositiveInt(process.env.OTP_RATE_LIMIT_WINDOW_MS, 5 * 60 * 1000),
+  max: parsePositiveInt(process.env.OTP_RATE_LIMIT_MAX, isProdEnv ? 3 : 30),
   message: {
     ok: false,
     error: "Too many OTP attempts, try again later"
@@ -273,7 +280,11 @@ router.post("/otp/setup/:id_user", requireAuth, csrfProtection, async (req, res,
 
 router.get("/otp/qrcode", requireAuth, async (req, res, next) => {
   try {
-    const idUser = req.auth?.sub;
+    const requestedUserId = String(req.query.id_user || "").trim();
+    const idUser = requestedUserId || req.auth?.sub;
+    if (requestedUserId && !canManageOtpForUser(req, requestedUserId)) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
     let userId;
     try {
       userId = BigInt(String(idUser));
@@ -437,12 +448,15 @@ router.get("/permissions", requireAuth, async (req, res, next) => {
       .map((item) => item.trim())
       .filter(Boolean);
 
+    const roleName = String(req.auth?.roleName || "");
+    const isBuyer = roleName.toLowerCase().includes("buyer");
+
     const data = await getModulePermissions({
       roleId: BigInt(String(roleId)),
       moduleNames: modules,
       isAdmin: req.auth?.isAdmin === true,
     });
-    return res.json(jsonSafe({ ok: true, isAdmin: req.auth?.isAdmin === true, data }));
+    return res.json(jsonSafe({ ok: true, isAdmin: req.auth?.isAdmin === true, roleName, isBuyer, data }));
   } catch (err) {
     return next(err);
   }

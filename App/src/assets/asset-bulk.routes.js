@@ -24,7 +24,7 @@ const path = require("path");
 const router = require("express").Router();
 const multer = require("multer");
 const ExcelJS = require("exceljs");
-const { fileTypeFromBuffer } = require("file-type");
+const fileType = require("file-type");
 
 const { requireAuth } = require("../auth/auth.middleware");
 const { requireModuleAccess } = require("../routes/access.guard");
@@ -80,6 +80,12 @@ const ALLOWED_MIME = new Set([
   "application/vnd.ms-excel",                                          // xls
 ]);
 const ALLOWED_EXT = new Set(["xlsx", "xls"]);
+
+function detectFileTypeFromBuffer(buffer) {
+  const detector = fileType?.fileTypeFromBuffer || fileType?.fromBuffer;
+  if (typeof detector !== "function") return Promise.resolve(null);
+  return detector(buffer);
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -168,7 +174,7 @@ router.post(
       }
 
       // Magic-byte validation. xlsx is a ZIP container; xls is OLE compound file.
-      const detected = await fileTypeFromBuffer(req.file.buffer).catch(() => null);
+      const detected = await detectFileTypeFromBuffer(req.file.buffer).catch(() => null);
       if (detected && !ALLOWED_MIME.has(detected.mime)) {
         return res.status(400).json({
           ok: false,

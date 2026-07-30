@@ -270,7 +270,7 @@
       delete: true,
     };
     const filters = Array.isArray(config.filters) ? config.filters : [];
-    const listConfig = parseListEndpoint(config.listEndpoint || `${config.endpoint}?includeInactive=true`);
+    const listConfig = parseListEndpoint(config.listEndpoint || `${config.endpoint}`);
     const initialTake = Number.parseInt(listConfig.params.get("take") || "", 10);
 
     const state = {

@@ -233,6 +233,9 @@
     if (moduleName === "r_buyer_offer") {
       return { read: true, create: false, update: false, delete: false };
     }
+    if (moduleName === "r_asset" && window.SD_USER?.isBuyer === true) {
+      return { read: false, create: false, update: false, delete: false };
+    }
     return window.SD_PERMISSIONS?.[moduleName] || { read: true, create: true, update: true, delete: true };
   }
 
@@ -486,7 +489,11 @@
     if (!modules.length) return {};
 
     const response = await window.SD_API.request(`/auth/permissions?modules=${encodeURIComponent(modules.join(","))}`);
-    window.SD_USER = { isAdmin: response?.isAdmin === true };
+    window.SD_USER = {
+      isAdmin: response?.isAdmin === true,
+      isBuyer: response?.isBuyer === true,
+      roleName: response?.roleName || "",
+    };
     return response?.data || {};
   }
 
@@ -494,6 +501,8 @@
     const readableModules = [];
     const allModules = [];
     const isAdmin = window.SD_USER?.isAdmin === true;
+    const isBuyer = window.SD_USER?.isBuyer === true;
+    const buyerAllowedModules = new Set(["r_buyer_offer"]);
 
     getMenuItems().forEach((item) => {
       const moduleName = item.getAttribute("data-module");
@@ -501,7 +510,9 @@
       const canRead = permission.read === true;
       const onlyAdmin = item.getAttribute("data-only-admin") === "1";
       const onlyBuyer = item.getAttribute("data-only-buyer") === "1";
-      const roleAllowed = (!onlyAdmin || isAdmin) && (!onlyBuyer || !isAdmin);
+      const buyerBlocked = window.SD_USER?.isBuyer === true && moduleName === "r_asset";
+      const buyerRoleAllowed = !isBuyer || buyerAllowedModules.has(moduleName);
+      const roleAllowed = (!onlyAdmin || isAdmin) && (!onlyBuyer || !isAdmin) && !buyerBlocked && buyerRoleAllowed;
 
       item.hidden = roleAllowed === false;
       item.classList.remove("active");
@@ -544,9 +555,11 @@
       });
 
       const initName = `init_${moduleName}`;
-      if (typeof window[initName] === "function") {
-        await window[initName]();
+      if (typeof window[initName] !== "function") {
+        throw new Error(`El modulo ${moduleName} no expone ${initName}()`);
       }
+
+      await window[initName]();
 
       setActive(moduleName);
       currentModuleName = moduleName;

@@ -3,7 +3,7 @@ async function init_r_bid() {
     title: "Historial de ofertas",
     description: "Vista tecnica de las pujas registradas por usuario en cada subasta.",
     endpoint: "/api/r_bid",
-    listEndpoint: "/api/r_bid?includeInactive=true&take=200",
+    listEndpoint: "/api/r_bid?take=200",
     idField: "id_bid",
     pageSize: 10,
     enableSearch: false,

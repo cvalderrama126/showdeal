@@ -3,7 +3,7 @@ async function init_r_role() {
     title: "Roles",
     description: "Catálogo de roles de usuario y perfiles operativos.",
     endpoint: "/api/r_role",
-    listEndpoint: "/api/r_role?includeInactive=true&take=200",
+    listEndpoint: "/api/r_role?take=200",
     idField: "id_role",
     pageSize: 10,
     searchPlaceholder: "Buscar por nombre de rol",

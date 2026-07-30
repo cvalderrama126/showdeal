@@ -35,6 +35,14 @@ function toPositiveDecimal(value) {
   return parsed.toFixed(2);
 }
 
+function toPositiveInteger(value) {
+  const text = String(value ?? "").trim();
+  if (!/^\d+$/.test(text)) return null;
+  const parsed = Number.parseInt(text, 10);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
 function normalizeColumnName(value) {
   return String(value || "")
     .normalize("NFD")
@@ -749,6 +757,672 @@ router.post(
 );
 
 router.get(
+  "/r_auction/lot/:id_event/bid-summary",
+  requireAuth,
+  requireModuleAccess("r_auction", "read"),
+  async (req, res, next) => {
+    try {
+      const idEvent = toBigIntId(req.params.id_event);
+      if (!idEvent) {
+        return res.status(400).json({ ok: false, error: "INVALID_EVENT_ID" });
+      }
+
+      const auctions = await prisma.r_auction.findMany({
+        where: {
+          id_event: idEvent,
+          is_active: true,
+        },
+        select: {
+          id_auction: true,
+          id_asset: true,
+          tp_auction: true,
+          r_bid: {
+            where: { is_active: true },
+            select: {
+              id_bid: true,
+              id_user: true,
+              value: true,
+              ins_at: true,
+              r_user: {
+                select: {
+                  user_1: true,
+                  name: true,
+                  r_company: {
+                    select: {
+                      company: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      const data = auctions.map((auction) => {
+        const orderedBids = [...(auction.r_bid || [])].sort((left, right) => {
+          const leftValue = Number(left.value || 0);
+          const rightValue = Number(right.value || 0);
+          if (rightValue !== leftValue) return rightValue - leftValue;
+
+          const leftAt = new Date(left.ins_at || 0).getTime();
+          const rightAt = new Date(right.ins_at || 0).getTime();
+          if (leftAt !== rightAt) return leftAt - rightAt;
+
+          return Number(left.id_bid || 0) - Number(right.id_bid || 0);
+        });
+
+        const biddersByUser = new Map();
+        for (const bid of orderedBids) {
+          const userKey = String(bid.id_user || "");
+          if (!userKey || biddersByUser.has(userKey)) continue;
+          biddersByUser.set(userKey, {
+            id_user: bid.id_user,
+            user: bid.r_user?.user_1 || null,
+            name: bid.r_user?.name || null,
+            company_name: bid.r_user?.r_company?.company || null,
+          });
+        }
+
+        const leader = orderedBids[0] || null;
+
+        return {
+          id_auction: auction.id_auction,
+          id_asset: auction.id_asset,
+          tp_auction: auction.tp_auction,
+          bid_count: orderedBids.length,
+          bidders_count: biddersByUser.size,
+          bidders: Array.from(biddersByUser.values()),
+          leader: leader
+            ? {
+                id_bid: leader.id_bid,
+                id_user: leader.id_user,
+                user: leader.r_user?.user_1 || null,
+                name: leader.r_user?.name || null,
+                company_name: leader.r_user?.r_company?.company || null,
+                value: leader.value,
+                ins_at: leader.ins_at,
+              }
+            : null,
+        };
+      });
+
+      return res.json({ ok: true, data: jsonSafe(data) });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+async function getLotAuctionsForExport(idEvent) {
+  return prisma.r_auction.findMany({
+    where: {
+      id_event: idEvent,
+      is_active: true,
+    },
+    select: {
+      id_auction: true,
+      id_asset: true,
+      r_asset: {
+        select: {
+          uin: true,
+          location_city: true,
+          location_address: true,
+          realized_value: true,
+          additional: true,
+        },
+      },
+      r_bid: {
+        where: { is_active: true },
+        select: {
+          id_bid: true,
+          id_user: true,
+          value: true,
+          ins_at: true,
+          r_user: {
+            select: {
+              user_1: true,
+              name: true,
+              r_company: {
+                select: {
+                  company: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { id_auction: "asc" },
+  });
+}
+
+function orderBidsForWinner(bids) {
+  return [...(Array.isArray(bids) ? bids : [])].sort((left, right) => {
+    const leftValue = Number(left.value || 0);
+    const rightValue = Number(right.value || 0);
+    if (rightValue !== leftValue) return rightValue - leftValue;
+
+    const leftAt = new Date(left.ins_at || 0).getTime();
+    const rightAt = new Date(right.ins_at || 0).getTime();
+    if (leftAt !== rightAt) return leftAt - rightAt;
+
+    return Number(left.id_bid || 0) - Number(right.id_bid || 0);
+  });
+}
+
+function calculateBestOfferByCompany(orderedBids) {
+  const bestOfferByCompany = new Map();
+  for (const bid of orderedBids) {
+    const companyName = String(bid.r_user?.r_company?.company || "").trim();
+    if (!companyName) continue;
+    const value = Number(bid.value || 0);
+
+    const current = bestOfferByCompany.get(companyName);
+    if (current === undefined || value > current) {
+      bestOfferByCompany.set(companyName, value);
+    }
+  }
+  return bestOfferByCompany;
+}
+
+function mapRoundWinner(auction) {
+  const orderedBids = orderBidsForWinner(auction.r_bid || []);
+  const leader = orderedBids[0] || null;
+  const leaderCompany = String(leader?.r_user?.r_company?.company || "").trim();
+  const leaderValue = leader ? Number(leader.value || 0) : 0;
+  const valorAdjudicacion = Number(auction.r_asset?.realized_value || 0);
+  const normalizedLeaderValue = Number.isFinite(leaderValue) ? leaderValue : 0;
+  const normalizedAdjudicacion = Number.isFinite(valorAdjudicacion) ? valorAdjudicacion : 0;
+
+  return {
+    orderedBids,
+    leader,
+    leaderCompany,
+    leaderValue: normalizedLeaderValue,
+    balance: normalizedLeaderValue - normalizedAdjudicacion,
+    hasLeader: normalizedLeaderValue > 0,
+  };
+}
+
+async function getRelaunchContextForEvent(idEvent) {
+  const eventRow = await prisma.r_event.findUnique({
+    where: { id_event: idEvent },
+    select: {
+      id_event: true,
+      additional: true,
+    },
+  });
+
+  const eventAdditional = jsonClone(eventRow?.additional);
+  const previousEventId = toBigIntId(eventAdditional.relaunch_from_event_id);
+  if (!previousEventId) {
+    return {
+      isRelaunch: false,
+      previousEventId: null,
+      previousByAssetId: new Map(),
+    };
+  }
+
+  const previousAuctions = await getLotAuctionsForExport(previousEventId);
+  const previousByAssetId = new Map();
+  for (const auction of previousAuctions) {
+    const assetKey = String(auction.id_asset || "");
+    if (!assetKey) continue;
+
+    const winner = mapRoundWinner(auction);
+    previousByAssetId.set(assetKey, {
+      id_event: String(previousEventId),
+      id_auction: String(auction.id_auction || ""),
+      company_name: winner.leaderCompany,
+      valor_ganador: winner.leaderValue,
+      balance: winner.balance,
+      winner_bid: winner.leader || null,
+    });
+  }
+
+  return {
+    isRelaunch: true,
+    previousEventId,
+    previousByAssetId,
+  };
+}
+
+function buildLotResultWorkbook(auctions, options = {}) {
+  const previousByAssetId = options.previousByAssetId instanceof Map
+    ? options.previousByAssetId
+    : new Map();
+
+  const companySet = new Set();
+  for (const auction of auctions) {
+    for (const bid of auction.r_bid || []) {
+      const companyName = String(bid.r_user?.r_company?.company || "").trim();
+      if (companyName) companySet.add(companyName);
+    }
+  }
+  const companyColumns = Array.from(companySet).sort((a, b) => a.localeCompare(b, "es"));
+
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("resultado_cierre");
+
+  const columns = [
+    { header: "placa", key: "placa", width: 18 },
+    { header: "ciudad", key: "ciudad", width: 20 },
+    { header: "direccion", key: "direccion", width: 30 },
+    { header: "Marca", key: "Marca", width: 18 },
+    { header: "Modelo", key: "Modelo", width: 18 },
+    { header: "Año", key: "Año", width: 12 },
+    { header: "valor adjudicación", key: "valor_adjudicacion", width: 18 },
+  ];
+
+  for (const companyName of companyColumns) {
+    columns.push({
+      header: `oferta - ${companyName}`,
+      key: `offer__${companyName}`,
+      width: 22,
+    });
+  }
+
+  columns.push({ header: "compañia ganadora", key: "compania_ganadora", width: 24 });
+  columns.push({ header: "valor ganador", key: "valor_ganador", width: 16 });
+  columns.push({ header: "balance", key: "balance", width: 16 });
+  columns.push({ header: "balance anterior", key: "balance_anterior", width: 18 });
+  columns.push({ header: "diferencia", key: "diferencia", width: 16 });
+
+  worksheet.columns = columns;
+  worksheet.getRow(1).font = { bold: true };
+
+  for (const auction of auctions) {
+    const asset = auction.r_asset || {};
+    const additional = jsonClone(asset.additional);
+
+    const placa = normalizePlate(asset.uin) || "-";
+    const ciudad = getStringFromAdditional(additional, ["ciudad", "city"]) || String(asset.location_city || "").trim();
+    const direccion = getStringFromAdditional(additional, ["direccion", "address"]) || String(asset.location_address || "").trim();
+    const marca = getStringFromAdditional(additional, ["marca", "brand"]) || "";
+    const modelo = getStringFromAdditional(additional, ["modelo", "model"]) || "";
+    const anio = getStringFromAdditional(additional, ["anio", "year"]) || "";
+    const valorAdjudicacion = Number(asset.realized_value || 0);
+
+    const currentRound = mapRoundWinner(auction);
+    const previousRound = previousByAssetId.get(String(auction.id_asset || "")) || null;
+    const superiorOffers = currentRound.orderedBids.filter((bid) => {
+      if (!previousRound) return false;
+      return Number(bid.value || 0) > Number(previousRound.valor_ganador || 0);
+    });
+
+    // In relaunch rounds, keep previous winner/value when no offer beats prior winner value.
+    const keepPreviousWinner = !!previousRound && superiorOffers.length === 0;
+
+    const leaderCompany = keepPreviousWinner
+      ? String(previousRound.company_name || "")
+      : currentRound.leaderCompany;
+    const leaderValue = keepPreviousWinner
+      ? Number(previousRound.valor_ganador || 0)
+      : Number(currentRound.leaderValue || 0);
+
+    const normalizedAdjudicacion = Number.isFinite(valorAdjudicacion) ? valorAdjudicacion : 0;
+    const normalizedLeaderValue = Number.isFinite(leaderValue) ? leaderValue : 0;
+    const balance = normalizedLeaderValue - normalizedAdjudicacion;
+    const balanceAnterior = previousRound ? Number(previousRound.balance || 0) : 0;
+
+    const bestOfferByCompany = calculateBestOfferByCompany(currentRound.orderedBids);
+
+    const row = {
+      placa,
+      ciudad,
+      direccion,
+      Marca: marca,
+      Modelo: modelo,
+      "Año": anio,
+      valor_adjudicacion: normalizedAdjudicacion,
+      compania_ganadora: leaderCompany || "",
+      valor_ganador: normalizedLeaderValue,
+      balance,
+      balance_anterior: balanceAnterior,
+      diferencia: balance - balanceAnterior,
+    };
+
+    for (const companyName of companyColumns) {
+      const key = `offer__${companyName}`;
+      const value = bestOfferByCompany.get(companyName);
+      row[key] = value === undefined ? "" : value;
+    }
+
+    worksheet.addRow(row);
+  }
+
+  return { workbook, companyColumns };
+}
+
+async function closeLotEvent(idEvent, auth) {
+  const eventRow = await prisma.r_event.findUnique({
+    where: { id_event: idEvent },
+    select: {
+      id_event: true,
+      additional: true,
+    },
+  });
+
+  if (!eventRow) return false;
+
+  const now = new Date();
+  const eventAdditional = jsonClone(eventRow.additional);
+  await prisma.r_event.update({
+    where: { id_event: idEvent },
+    data: {
+      is_active: false,
+      end_at: now,
+      additional: {
+        ...eventAdditional,
+        lot_stage: "CLOSED",
+        closed_at: now.toISOString(),
+        closed_by: {
+          id_user: String(auth?.sub || ""),
+          user: String(auth?.login || ""),
+        },
+      },
+    },
+  });
+
+  return true;
+}
+
+router.post(
+  "/r_auction/lot/:id_event/close",
+  requireAuth,
+  requireModuleAccess("r_auction", "update"),
+  async (req, res, next) => {
+    try {
+      const idEvent = toBigIntId(req.params.id_event);
+      if (!idEvent) {
+        return res.status(400).json({ ok: false, error: "INVALID_EVENT_ID" });
+      }
+
+      const closed = await closeLotEvent(idEvent, req.auth);
+      if (!closed) {
+        return res.status(404).json({ ok: false, error: "EVENT_NOT_FOUND" });
+      }
+
+      audit({
+        req,
+        action: "LOT_CLOSE",
+        entity: "r_event",
+        entityId: idEvent,
+        data: {
+          id_event: String(idEvent),
+        },
+      });
+
+      return res.json({ ok: true, data: { id_event: String(idEvent), lot_stage: "CLOSED" } });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+router.get(
+  "/r_auction/lot/:id_event/export",
+  requireAuth,
+  requireModuleAccess("r_auction", "read"),
+  async (req, res, next) => {
+    try {
+      const idEvent = toBigIntId(req.params.id_event);
+      if (!idEvent) {
+        return res.status(400).json({ ok: false, error: "INVALID_EVENT_ID" });
+      }
+
+      const auctions = await getLotAuctionsForExport(idEvent);
+      if (!auctions.length) {
+        return res.status(409).json({ ok: false, error: "EVENT_WITHOUT_AUCTIONS" });
+      }
+
+      const relaunchContext = await getRelaunchContextForEvent(idEvent);
+      const { workbook } = buildLotResultWorkbook(auctions, {
+        previousByAssetId: relaunchContext.previousByAssetId,
+      });
+      const fileName = `cierre_lote_${idEvent}.xlsx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      await workbook.xlsx.write(res);
+      return res.end();
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+router.post(
+  "/r_auction/lot/:id_event/relaunch",
+  requireAuth,
+  requireModuleAccess("r_auction", "create"),
+  async (req, res, next) => {
+    try {
+      const idEvent = toBigIntId(req.params.id_event);
+      if (!idEvent) {
+        return res.status(400).json({ ok: false, error: "INVALID_EVENT_ID" });
+      }
+
+      const sourceEvent = await prisma.r_event.findUnique({
+        where: { id_event: idEvent },
+        select: {
+          id_event: true,
+          tp_event: true,
+          start_at: true,
+          end_at: true,
+          is_active: true,
+          additional: true,
+        },
+      });
+
+      if (!sourceEvent) {
+        return res.status(404).json({ ok: false, error: "EVENT_NOT_FOUND" });
+      }
+
+      const sourceAdditional = jsonClone(sourceEvent.additional);
+      const sourceLotType = String(sourceAdditional.lot_type || "").toUpperCase();
+      const sourceLotStage = String(sourceAdditional.lot_stage || "").toUpperCase();
+      const sourceIsClosed = sourceEvent.is_active === false || sourceLotStage === "CLOSED";
+      if (sourceLotType !== "JUDICIAL_LOT" || !sourceIsClosed) {
+        return res.status(409).json({ ok: false, error: "LOT_MUST_BE_CLOSED_TO_RELAUNCH" });
+      }
+
+      const sourceInvitations = await prisma.r_invitation.findMany({
+        where: {
+          id_event: idEvent,
+          is_active: true,
+        },
+        select: {
+          id_company: true,
+        },
+      });
+
+      const sourceAuctions = await prisma.r_auction.findMany({
+        where: {
+          id_event: idEvent,
+          is_active: true,
+          r_asset: {
+            is: { is_active: true },
+          },
+        },
+        select: {
+          id_asset: true,
+          tp_auction: true,
+        },
+      });
+
+      if (!sourceAuctions.length) {
+        return res.status(409).json({ ok: false, error: "EVENT_WITHOUT_AUCTIONS" });
+      }
+
+      const requestedStartAt = req.body?.start_at ? new Date(req.body.start_at) : null;
+      const requestedEndAt = req.body?.end_at ? new Date(req.body.end_at) : null;
+      const isRequestedStartValid = requestedStartAt instanceof Date && Number.isFinite(requestedStartAt.getTime());
+      const isRequestedEndValid = requestedEndAt instanceof Date && Number.isFinite(requestedEndAt.getTime());
+
+      let startAt;
+      let endAt;
+      if (isRequestedStartValid || isRequestedEndValid) {
+        if (!isRequestedStartValid || !isRequestedEndValid) {
+          return res.status(400).json({ ok: false, error: "START_AND_END_REQUIRED" });
+        }
+        if (requestedStartAt.getTime() >= requestedEndAt.getTime()) {
+          return res.status(400).json({ ok: false, error: "INVALID_DATE_RANGE" });
+        }
+        startAt = requestedStartAt;
+        endAt = requestedEndAt;
+      } else {
+        const sourceStart = sourceEvent.start_at ? new Date(sourceEvent.start_at) : null;
+        const sourceEnd = sourceEvent.end_at ? new Date(sourceEvent.end_at) : null;
+        const sourceDurationMs = sourceStart && sourceEnd
+          ? sourceEnd.getTime() - sourceStart.getTime()
+          : 0;
+
+        const fallbackDurationMs = sourceDurationMs > 0 ? sourceDurationMs : (24 * 60 * 60 * 1000);
+        startAt = new Date();
+        endAt = new Date(startAt.getTime() + fallbackDurationMs);
+      }
+
+      const sourceLotName = String(sourceAdditional.lot_name || `Lote #${idEvent}`).trim();
+      const relaunchRound = Number.parseInt(String(sourceAdditional.relaunch_round || "1"), 10);
+      const nextRelaunchRound = Number.isSafeInteger(relaunchRound) && relaunchRound > 0
+        ? relaunchRound + 1
+        : 2;
+      const baseLotEventId = String(sourceAdditional.base_lot_event_id || idEvent);
+
+      const created = await prisma.$transaction(async (tx) => {
+        const event = await tx.r_event.create({
+          data: {
+            tp_event: sourceEvent.tp_event || "SEALED_BID",
+            start_at: startAt,
+            end_at: endAt,
+            is_active: true,
+            additional: {
+              lot_type: "JUDICIAL_LOT",
+              lot_stage: "ROUND_1_OPEN",
+              lot_name: `${sourceLotName} - Relanzado R${nextRelaunchRound}`,
+              relaunch_round: nextRelaunchRound,
+              relaunch_from_event_id: String(idEvent),
+              base_lot_event_id: baseLotEventId,
+            },
+          },
+          select: {
+            id_event: true,
+          },
+        });
+
+        const invitationRows = sourceInvitations
+          .map((row) => ({
+            id_event: event.id_event,
+            id_company: row.id_company,
+            is_active: true,
+          }));
+
+        if (invitationRows.length) {
+          await tx.r_invitation.createMany({
+            data: invitationRows,
+          });
+        }
+
+        const auctionRows = sourceAuctions.map((row) => ({
+          id_event: event.id_event,
+          id_asset: row.id_asset,
+          tp_auction: row.tp_auction || "SEALED_BID",
+          is_active: true,
+        }));
+
+        await tx.r_auction.createMany({
+          data: auctionRows,
+        });
+
+        return {
+          id_event: event.id_event,
+          invitations: invitationRows.length,
+          auctions: auctionRows.length,
+        };
+      });
+
+      audit({
+        req,
+        action: "LOT_RELAUNCH",
+        entity: "r_event",
+        entityId: created.id_event,
+        data: {
+          source_id_event: String(idEvent),
+          new_id_event: String(created.id_event),
+          invitations: created.invitations,
+          auctions: created.auctions,
+        },
+      });
+
+      return res.status(201).json({
+        ok: true,
+        data: {
+          source_id_event: String(idEvent),
+          id_event: String(created.id_event),
+          invitations: created.invitations,
+          auctions: created.auctions,
+        },
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+router.get(
+  "/r_auction/lot/:id_event/close-and-export",
+  requireAuth,
+  requireModuleAccess("r_auction", "update"),
+  async (req, res, next) => {
+    try {
+      const idEvent = toBigIntId(req.params.id_event);
+      if (!idEvent) {
+        return res.status(400).json({ ok: false, error: "INVALID_EVENT_ID" });
+      }
+
+      const eventExists = await prisma.r_event.findUnique({
+        where: { id_event: idEvent },
+        select: { id_event: true },
+      });
+      if (!eventExists) {
+        return res.status(404).json({ ok: false, error: "EVENT_NOT_FOUND" });
+      }
+
+      const auctions = await getLotAuctionsForExport(idEvent);
+
+      if (!auctions.length) {
+        return res.status(409).json({ ok: false, error: "EVENT_WITHOUT_AUCTIONS" });
+      }
+
+      const { workbook, companyColumns } = buildLotResultWorkbook(auctions);
+
+      await closeLotEvent(idEvent, req.auth);
+
+      audit({
+        req,
+        action: "LOT_CLOSE_AND_EXPORT",
+        entity: "r_event",
+        entityId: idEvent,
+        data: {
+          id_event: String(idEvent),
+          companies_with_bids: companyColumns.length,
+          vehicles: auctions.length,
+        },
+      });
+
+      const fileName = `cierre_lote_${idEvent}.xlsx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      await workbook.xlsx.write(res);
+      return res.end();
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
+router.get(
   "/r_auction_resolution",
   requireAuth,
   requireModuleAccess("r_auction_resolution", "read"),
@@ -975,7 +1649,10 @@ router.get("/r_buyer_offer", requireAuth, async (req, res, next) => {
           select: {
             id_asset: true,
             tp_asset: true,
+            uin: true,
+            location_city: true,
             starting_bid: true,
+            additional: true,
           },
         },
         r_event: {
@@ -1030,9 +1707,19 @@ router.get("/r_buyer_offer", requireAuth, async (req, res, next) => {
       if (isEventOpen) eventStatus = "VIGENTE";
       else if (startAt && now < startAt) eventStatus = "PROGRAMADO";
 
+      const additional = jsonClone(row.r_asset?.additional);
+      const brand = getStringFromAdditional(additional, ["marca", "brand"]);
+      const model = getStringFromAdditional(additional, ["modelo", "model"]);
+      const year = getStringFromAdditional(additional, ["anio", "year"]);
+
       return {
         id_asset: row.r_asset?.id_asset,
         tp_asset: row.r_asset?.tp_asset,
+        plate: normalizePlate(row.r_asset?.uin),
+        city: String(row.r_asset?.location_city || "").trim(),
+        brand: brand || "",
+        model: model || "",
+        year: year || "",
         id_auction: row.id_auction,
         tp_auction: tpAuction,
         id_event: row.r_event?.id_event,
@@ -1042,13 +1729,434 @@ router.get("/r_buyer_offer", requireAuth, async (req, res, next) => {
         already_bid: alreadyBid,
         can_bid: canBid,
       };
-    });
+    }).filter((row) => row.event_status === "VIGENTE");
 
     return res.json({ ok: true, data: jsonSafe(data) });
   } catch (err) {
     return next(err);
   }
 });
+
+router.get("/r_buyer_offer/round1/template", requireAuth, async (req, res, next) => {
+  try {
+    const idEvent = toBigIntId(req.query?.id_event);
+    if (!idEvent) {
+      return res.status(400).json({ ok: false, error: "INVALID_EVENT_ID" });
+    }
+
+    const companyId = toBigIntId(req.auth?.companyId);
+    if (!companyId) {
+      return res.status(403).json({ ok: false, error: "INVALID_COMPANY_IN_TOKEN" });
+    }
+
+    const eventRow = await prisma.r_event.findUnique({
+      where: { id_event: idEvent },
+      select: { id_event: true, is_active: true, additional: true },
+    });
+
+    if (!eventRow || eventRow.is_active !== true) {
+      return res.status(404).json({ ok: false, error: "EVENT_NOT_AVAILABLE" });
+    }
+
+    const invitation = await prisma.r_invitation.findFirst({
+      where: {
+        id_event: idEvent,
+        id_company: companyId,
+        is_active: true,
+      },
+      select: { id_invitation: true },
+    });
+
+    if (!invitation) {
+      return res.status(403).json({ ok: false, error: "COMPANY_NOT_INVITED_FOR_EVENT" });
+    }
+
+    const relaunchContext = await getRelaunchContextForEvent(idEvent);
+
+    const auctions = await prisma.r_auction.findMany({
+      where: {
+        id_event: idEvent,
+        is_active: true,
+        r_asset: {
+          is: { is_active: true },
+        },
+      },
+      select: {
+        id_asset: true,
+        r_asset: {
+          select: {
+            uin: true,
+            location_city: true,
+            location_address: true,
+            status: true,
+            book_value: true,
+            appraised_value: true,
+            expected_value: true,
+            reserve_price: true,
+            starting_bid: true,
+            is_active: true,
+            additional: true,
+          },
+        },
+      },
+      orderBy: { id_auction: "asc" },
+    });
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("ofertas_lote");
+    const worksheetColumns = [
+      { header: "placa", key: "placa", width: 22 },
+      { header: "ciudad", key: "ciudad", width: 22 },
+      { header: "direccion", key: "direccion", width: 32 },
+      { header: "Marca", key: "Marca", width: 18 },
+      { header: "Modelo", key: "Modelo", width: 18 },
+      { header: "Año", key: "Año", width: 12 },
+    ];
+
+    if (relaunchContext.isRelaunch) {
+      worksheetColumns.push({ header: "valor ganador", key: "valor_ganador", width: 18 });
+    }
+    worksheetColumns.push({ header: "oferta", key: "oferta", width: 16 });
+
+    worksheet.columns = worksheetColumns;
+
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+
+    for (const row of auctions) {
+      const asset = row?.r_asset || {};
+      const plate = normalizePlate(asset.uin);
+      if (!plate) continue;
+      const additional = jsonClone(asset.additional);
+      const marca = getStringFromAdditional(additional, ["marca", "brand"]) || "";
+      const modelo = getStringFromAdditional(additional, ["modelo", "model"]) || "";
+      const anio = getStringFromAdditional(additional, ["anio", "year"]) || "";
+      const previousRound = relaunchContext.previousByAssetId.get(String(row.id_asset || "")) || null;
+
+      worksheet.addRow({
+        placa: plate,
+        ciudad: String(asset.location_city || "").trim(),
+        direccion: String(asset.location_address || "").trim(),
+        Marca: marca,
+        Modelo: modelo,
+        "Año": anio,
+        valor_ganador: relaunchContext.isRelaunch
+          ? Number(previousRound?.valor_ganador || 0)
+          : undefined,
+        oferta: "",
+      });
+    }
+
+    const infoSheet = workbook.addWorksheet("instrucciones");
+    infoSheet.columns = [
+      { header: "campo", key: "campo", width: 24 },
+      { header: "regla", key: "regla", width: 90 },
+    ];
+    infoSheet.getRow(1).font = { bold: true };
+    infoSheet.addRows([
+      {
+        campo: "placa",
+        regla: "Obligatoria. Debe existir en el lote judicial habilitado para tu compañía.",
+      },
+      {
+        campo: "oferta",
+        regla: "Obligatoria. Debe ser un numero entero positivo mayor a cero.",
+      },
+      {
+        campo: "valor ganador",
+        regla: relaunchContext.isRelaunch
+          ? "Informativa para relanzamiento. Refleja el valor ganador de la ronda anterior por vehículo."
+          : "No aplica para lotes sin relanzamiento.",
+      },
+      {
+        campo: "unicidad",
+        regla: "No repetir placas en el mismo archivo.",
+      },
+      {
+        campo: "restriccion",
+        regla: "Para sobre cerrado solo se permite una oferta por usuario y vehículo.",
+      },
+      {
+        campo: "nota",
+        regla: "La plantilla replica la estructura del lote judicial y excluye la columna valor adjudicacion.",
+      },
+    ]);
+
+    const fileName = `plantilla_ofertas_evento_${idEvent}.xlsx`;
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.post(
+  "/r_buyer_offer/round1/upload",
+  requireAuth,
+  round1OfferUpload.single("file"),
+  async (req, res, next) => {
+    try {
+      const idEvent = toBigIntId(req.body?.id_event);
+      if (!idEvent) {
+        return res.status(400).json({ ok: false, error: "INVALID_EVENT_ID" });
+      }
+
+      const idUser = toBigIntId(req.auth?.sub);
+      if (!idUser) {
+        return res.status(401).json({ ok: false, error: "INVALID_USER_IN_TOKEN" });
+      }
+
+      const companyId = toBigIntId(req.auth?.companyId);
+      if (!companyId) {
+        return res.status(403).json({ ok: false, error: "INVALID_COMPANY_IN_TOKEN" });
+      }
+
+      if (!req.file || !req.file.buffer) {
+        return res.status(400).json({ ok: false, error: "FILE_REQUIRED" });
+      }
+
+      const eventRow = await prisma.r_event.findUnique({
+        where: { id_event: idEvent },
+        select: {
+          id_event: true,
+          is_active: true,
+          start_at: true,
+          end_at: true,
+        },
+      });
+
+      if (!eventRow || eventRow.is_active !== true) {
+        return res.status(404).json({ ok: false, error: "EVENT_NOT_AVAILABLE" });
+      }
+
+      const now = new Date();
+      if (now < new Date(eventRow.start_at) || now > new Date(eventRow.end_at)) {
+        return res.status(409).json({ ok: false, error: "EVENT_NOT_ACTIVE", message: "El lote no está vigente para ofertar" });
+      }
+
+      const invitation = await prisma.r_invitation.findFirst({
+        where: {
+          id_event: idEvent,
+          id_company: companyId,
+          is_active: true,
+        },
+        select: { id_invitation: true },
+      });
+
+      if (!invitation) {
+        return res.status(403).json({ ok: false, error: "COMPANY_NOT_INVITED_FOR_EVENT" });
+      }
+
+      const auctionRows = await prisma.r_auction.findMany({
+        where: {
+          id_event: idEvent,
+          is_active: true,
+          r_asset: {
+            is: { is_active: true },
+          },
+        },
+        select: {
+          id_auction: true,
+          tp_auction: true,
+          r_asset: {
+            select: {
+              uin: true,
+            },
+          },
+        },
+      });
+
+      if (!auctionRows.length) {
+        return res.status(409).json({ ok: false, error: "EVENT_WITHOUT_AUCTIONS" });
+      }
+
+      const workbook = new ExcelJS.Workbook();
+      try {
+        await workbook.xlsx.load(req.file.buffer);
+      } catch (err) {
+        return res.status(400).json({ ok: false, error: "INVALID_EXCEL_FILE", message: err.message });
+      }
+
+      const sheet = workbook.worksheets[0];
+      if (!sheet) {
+        return res.status(400).json({ ok: false, error: "EMPTY_WORKBOOK" });
+      }
+
+      const headerMap = new Map();
+      const headerRow = sheet.getRow(1);
+      headerRow.eachCell((cell, colIndex) => {
+        const normalized = normalizeColumnName(excelCellToString(cell));
+        if (!normalized) return;
+
+        const canonicalName = normalized === "valor_oferta" ? "oferta" : normalized;
+        if (canonicalName && !headerMap.has(canonicalName)) {
+          headerMap.set(canonicalName, colIndex);
+        }
+      });
+
+      const requiredColumns = ["placa", "oferta"];
+      const missing = requiredColumns.filter((name) => !headerMap.has(name));
+      if (missing.length) {
+        return res.status(400).json({ ok: false, error: "MISSING_REQUIRED_COLUMNS", missing, required: requiredColumns });
+      }
+
+      const auctionByPlate = new Map();
+      for (const row of auctionRows) {
+        const plate = normalizePlate(row?.r_asset?.uin);
+        if (!plate) continue;
+        auctionByPlate.set(plate, {
+          id_auction: row.id_auction,
+          tp_auction: String(row.tp_auction || "").toUpperCase(),
+        });
+      }
+
+      const parseResults = [];
+      const stagedBids = [];
+      const seenPlates = new Set();
+      for (let line = 2; line <= sheet.rowCount; line += 1) {
+        const excelRow = sheet.getRow(line);
+        const plate = normalizePlate(excelCellToString(excelRow.getCell(headerMap.get("placa"))));
+        const amountText = excelCellToString(excelRow.getCell(headerMap.get("oferta")));
+        const amount = toPositiveInteger(amountText);
+
+        if (!plate && !amountText) continue;
+
+        if (!plate) {
+          parseResults.push({ row: line, ok: false, error: "PLATE_REQUIRED" });
+          continue;
+        }
+
+        if (!amount) {
+          parseResults.push({
+            row: line,
+            ok: false,
+            plate,
+            error: "INVALID_OFFER_VALUE",
+            message: "La oferta debe ser un entero positivo",
+          });
+          continue;
+        }
+
+        if (seenPlates.has(plate)) {
+          parseResults.push({ row: line, ok: false, plate, error: "DUPLICATED_PLATE_IN_FILE" });
+          continue;
+        }
+        seenPlates.add(plate);
+
+        const auction = auctionByPlate.get(plate);
+        if (!auction) {
+          parseResults.push({ row: line, ok: false, plate, error: "PLATE_NOT_IN_EVENT_LOT" });
+          continue;
+        }
+
+        stagedBids.push({
+          id_auction: auction.id_auction,
+          tp_auction: auction.tp_auction,
+          value: amount,
+          plate,
+          row: line,
+        });
+      }
+
+      if (!stagedBids.length) {
+        return res.status(400).json({ ok: false, error: "NO_VALID_OFFERS", results: parseResults });
+      }
+
+      const sealedAuctionIds = stagedBids
+        .filter((row) => row.tp_auction === "SEALED_BID")
+        .map((row) => row.id_auction);
+
+      const existingByAuction = new Set();
+      if (sealedAuctionIds.length) {
+        const existingRows = await prisma.r_bid.findMany({
+          where: {
+            id_user: idUser,
+            is_active: true,
+            id_auction: { in: sealedAuctionIds },
+          },
+          select: { id_auction: true },
+        });
+        for (const row of existingRows) {
+          existingByAuction.add(String(row.id_auction));
+        }
+      }
+
+      const finalBids = [];
+      for (const bid of stagedBids) {
+        if (bid.tp_auction === "SEALED_BID" && existingByAuction.has(String(bid.id_auction))) {
+          parseResults.push({ row: bid.row, ok: false, plate: bid.plate, error: "SEALED_BID_ALREADY_SUBMITTED" });
+          continue;
+        }
+        finalBids.push(bid);
+      }
+
+      if (!finalBids.length) {
+        return res.status(409).json({ ok: false, error: "NO_OFFERS_ACCEPTED", results: parseResults });
+      }
+
+      const created = await prisma.$transaction(async (tx) => {
+        const createdRows = [];
+        for (const bid of finalBids) {
+          const row = await tx.r_bid.create({
+            data: {
+              id_auction: bid.id_auction,
+              id_user: idUser,
+              value: bid.value,
+              is_active: true,
+              additional: {
+                source: "buyer_excel_upload",
+                id_event: String(idEvent),
+                id_company: String(companyId),
+                plate: bid.plate,
+              },
+            },
+            select: {
+              id_bid: true,
+              id_auction: true,
+              value: true,
+            },
+          });
+          createdRows.push({ ...row, row: bid.row, plate: bid.plate, ok: true });
+        }
+        return createdRows;
+      });
+
+      audit({
+        req,
+        action: "BUYER_BID_BULK_UPLOAD",
+        entity: "r_bid",
+        entityId: null,
+        data: {
+          id_event: String(idEvent),
+          id_company: String(companyId),
+          id_user: String(idUser),
+          created_count: created.length,
+          failed_count: parseResults.length,
+          file_name: req.file.originalname,
+        },
+      });
+
+      return res.status(201).json({
+        ok: true,
+        data: {
+          id_event: String(idEvent),
+          id_company: String(companyId),
+          id_user: String(idUser),
+          summary: {
+            total_rows: Math.max(0, sheet.rowCount - 1),
+            created: created.length,
+            failed: parseResults.length,
+          },
+          results: [...created, ...parseResults],
+        },
+      });
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
 
 router.use(
   "/r_bid",

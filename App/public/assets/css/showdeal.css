@@ -176,6 +176,11 @@ a:hover{ color: var(--sd-primary-2); }
 
 .sd-body{
   background: var(--sd-bg);
+  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Topbar */
@@ -244,6 +249,10 @@ a:hover{ color: var(--sd-primary-2); }
 
 .judicial-lot-actions-row {
   margin-top: 4px;
+}
+
+#lotCreateCompanies {
+  min-height: 38px;
 }
 
 .lot-module-shell {
@@ -384,6 +393,14 @@ a:hover{ color: var(--sd-primary-2); }
   transition: transform 120ms ease, filter 120ms ease;
 }
 
+.judicial-lot-actions .lot-btn-template {
+  margin-right: auto;
+}
+
+.judicial-lot-actions .lot-btn-create {
+  margin-left: auto;
+}
+
 .judicial-lot-actions button.lot-btn:hover {
   transform: translateY(-1px);
   filter: brightness(1.03);
@@ -420,6 +437,31 @@ a:hover{ color: var(--sd-primary-2); }
   border-color: #475569;
 }
 
+.lot-icon-btn {
+  width: 36px;
+  height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.lot-icon-btn:hover {
+  transform: translateY(-1px);
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.lot-icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
 @media (max-width: 768px) {
   .lot-kpi-card {
     min-height: 82px;
@@ -427,6 +469,12 @@ a:hover{ color: var(--sd-primary-2); }
 
   .judicial-lot-actions button.lot-btn {
     min-width: 100%;
+  }
+
+  .judicial-lot-actions .lot-btn-template,
+  .judicial-lot-actions .lot-btn-create {
+    margin-left: 0;
+    margin-right: 0;
   }
 
   .lot-module-badge {
@@ -503,20 +551,31 @@ a:hover{ color: var(--sd-primary-2); }
 /* Shell */
 .sd-shell{
   padding: 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sd-shell > .row{
+  height: 100%;
 }
 
 /* Sidebar */
 .sd-sidebar-wrap{
   padding-right: 14px;
+  height: 100%;
+  min-height: 0;
 }
 
 .sd-sidebar{
   background: linear-gradient(180deg, var(--sd-dark) 0%, #0a1222 100%);
   border-radius: 18px;
   padding: 18px;
-  min-height: calc(100vh - 110px);
+  height: 100%;
+  min-height: 0;
   box-shadow: 0 10px 30px rgba(2,6,23,0.15);
   border: 1px solid rgba(255,255,255,0.06);
+  overflow: hidden;
 }
 
 .sd-session{
@@ -632,11 +691,23 @@ a:hover{ color: var(--sd-primary-2); }
 /* Content placeholder */
 .sd-content-wrap{
   padding-left: 14px;
+  height: 100%;
+  min-height: 0;
 }
 
 .sd-content{
   background: #fff;
   border-radius: 18px;
-  min-height: calc(100vh - 110px);
+  height: 100%;
+  min-height: 0;
   border: 1px solid var(--sd-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#appContent {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }

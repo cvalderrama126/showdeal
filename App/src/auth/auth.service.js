@@ -12,6 +12,13 @@ const OTP_REPLAY_TTL_SECONDS = 60;
 const MAX_FAILED_LOGIN_ATTEMPTS = Number.parseInt(process.env.MAX_FAILED_LOGIN_ATTEMPTS || "3", 10);
 const ACCOUNT_LOCK_MINUTES = Number.parseInt(process.env.ACCOUNT_LOCK_MINUTES || "15", 10);
 
+function isOtpReplayStrictMode() {
+  const raw = String(process.env.OTP_REPLAY_STRICT || "").trim().toLowerCase();
+  if (raw === "true" || raw === "1" || raw === "yes") return true;
+  if (raw === "false" || raw === "0" || raw === "no") return false;
+  return process.env.NODE_ENV === "production";
+}
+
 // OTP secret encryption key derived from OTP_ENCRYPTION_KEY env var.
 // Falls back to JWT_SECRET so existing deployments don't break.
 // In production, set OTP_ENCRYPTION_KEY to a dedicated 64-char hex random string.
@@ -564,7 +571,10 @@ async function verifyOtp({ challengeToken, otp }) {
     return { ok: false, status: 401, error: "OTP replay detected" };
   }
   if (canUseOtp !== true) {
-    return { ok: false, status: 503, error: "MFA service temporarily unavailable" };
+    if (isOtpReplayStrictMode()) {
+      return { ok: false, status: 503, error: "MFA service temporarily unavailable" };
+    }
+    console.warn("OTP replay cache unavailable; continuing OTP verification in non-strict mode.");
   }
 
   const firstLogin = u.additional?.first_login === true;

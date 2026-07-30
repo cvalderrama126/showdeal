@@ -749,7 +749,7 @@ async function init_r_event() {
     title: "Eventos de subasta",
     description: "Crea el evento con vehículos y compañías invitadas en un solo paso.",
     endpoint: "/api/r_event",
-    listEndpoint: "/api/r_event?includeInactive=true&take=200",
+    listEndpoint: "/api/r_event?take=200",
     idField: "id_event",
     pageSize: 10,
     searchPlaceholder: "Buscar por modalidad del evento",

@@ -3,7 +3,7 @@ async function init_r_company() {
     title: "Compañías",
     description: "Catálogo de compañías vinculadas al ecosistema ShowDeal.",
     endpoint: "/api/r_company",
-    listEndpoint: "/api/r_company?includeInactive=true&take=200",
+    listEndpoint: "/api/r_company?take=200",
     idField: "id_company",
     pageSize: 10,
     searchPlaceholder: "Buscar por UIN o nombre de compania",

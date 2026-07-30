@@ -69,7 +69,7 @@ async function init_r_user() {
       q: "",
       id_company: "",
       id_role: "",
-      includeInactive: true,
+      includeInactive: false,
     },
     pagination: {
       take: PAGE_SIZE,
@@ -399,6 +399,15 @@ async function init_r_user() {
     document.getElementById("otpCode").value = "";
     document.getElementById("otpSecret").value = "";
     document.getElementById("otpAuthUrl").value = "";
+    const qrImage = document.getElementById("otpQrImage");
+    const qrHint = document.getElementById("otpQrHint");
+    if (qrImage) {
+      qrImage.removeAttribute("src");
+      qrImage.style.display = "none";
+    }
+    if (qrHint) {
+      qrHint.textContent = "Escanea este QR con Google Authenticator/Authy.";
+    }
     document.getElementById("otpModalTitle").textContent = row?.otp_enabled ? "Administrar OTP" : "Habilitar OTP";
     document.getElementById("otpModalUserInfo").innerHTML = `Usuario: <b>${escapeHtml(row?.user || "")}</b> (ID ${escapeHtml(row?.id_user || "")})`;
     
@@ -409,6 +418,7 @@ async function init_r_user() {
       document.getElementById("otpCode").style.display = "none";
       document.getElementById("otpAuthUrl").parentElement.style.display = "none";
       document.getElementById("otpSecret").parentElement.style.display = "none";
+      document.getElementById("otpQrGroup").style.display = "none";
       document.getElementById("btnEnableOtp").textContent = "OTP ya habilitado";
       document.getElementById("btnEnableOtp").disabled = true;
       showAlert("otpModalAlert", "success", "OTP está habilitado para este usuario.");
@@ -417,6 +427,7 @@ async function init_r_user() {
       document.getElementById("otpCode").style.display = "block";
       document.getElementById("otpAuthUrl").parentElement.style.display = "block";
       document.getElementById("otpSecret").parentElement.style.display = "block";
+      document.getElementById("otpQrGroup").style.display = "block";
       document.getElementById("btnEnableOtp").textContent = "Habilitar OTP";
       document.getElementById("btnEnableOtp").disabled = false;
     }
@@ -426,6 +437,14 @@ async function init_r_user() {
         const setup = await api(`/auth/otp/setup/${row.id_user}`, { method: "POST" });
         document.getElementById("otpSecret").value = setup?.secret || "";
         document.getElementById("otpAuthUrl").value = setup?.otpauth_url || "";
+        if (qrImage) {
+          qrImage.src = `/auth/otp/qrcode?id_user=${encodeURIComponent(String(row.id_user))}&t=${Date.now()}`;
+          qrImage.style.display = "block";
+          qrImage.onerror = () => {
+            qrImage.style.display = "none";
+            if (qrHint) qrHint.textContent = "No se pudo cargar el QR. Usa el Secret OTP o la OTP Auth URL manualmente.";
+          };
+        }
         showAlert("otpModalAlert", "info", "OTP configurado. Ingresa el código generado para habilitarlo.");
       } catch (err) {
         showAlert("usersAlert", "danger", err?.error || err?.message || "No se pudo iniciar la configuración OTP");

@@ -32,7 +32,7 @@
       <div class="col-12 col-lg-2">
         <label class="form-label d-block">Estado</label>
         <div class="form-check mt-2">
-          <input class="form-check-input" type="checkbox" id="usersFilterInactive" checked>
+          <input class="form-check-input" type="checkbox" id="usersFilterInactive">
           <label class="form-check-label" for="usersFilterInactive">Incluir inactivos</label>
         </div>
       </div>
@@ -130,6 +130,13 @@
           <label class="form-label">OTP Auth URL</label>
           <textarea class="form-control" id="otpAuthUrl" rows="3" readonly></textarea>
           <div class="sd-muted small mt-1">Copia esta URL en tu app autenticadora o escanea el QR si tu app lo soporta.</div>
+        </div>
+        <div class="mb-3" id="otpQrGroup">
+          <label class="form-label">Código QR</label>
+          <div class="border rounded-3 p-2 text-center bg-light">
+            <img id="otpQrImage" alt="QR OTP" style="max-width: 220px; width: 100%; height: auto;" />
+          </div>
+          <div class="sd-muted small mt-1" id="otpQrHint">Escanea este QR con Google Authenticator/Authy.</div>
         </div>
         <div class="mb-2">
           <label class="form-label">Código OTP (6 dígitos)</label>

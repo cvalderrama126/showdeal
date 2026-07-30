@@ -57,7 +57,7 @@ async function init_r_access() {
     title: "Accesos",
     description: "Permisos CRUD por módulo y rol.",
     endpoint: "/api/r_access",
-    listEndpoint: "/api/r_access?includeInactive=true&take=200",
+    listEndpoint: "/api/r_access?take=200",
     idField: "id_access",
     pageSize: 10,
     enableSearch: false,
