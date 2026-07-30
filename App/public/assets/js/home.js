@@ -229,6 +229,15 @@
   }
 
   function modulePermission(moduleName) {
+    const roleName = String(window.SD_USER?.roleName || "").trim().toLowerCase();
+    const isAuditor = roleName.includes("auditor") || roleName.includes("audit");
+
+    // Auditor role must always keep access to r_log on the client menu,
+    // even if permission payload is stale; backend still enforces real access.
+    if (isAuditor && moduleName === "r_log") {
+      return { read: true, create: false, update: false, delete: false };
+    }
+
     // Frontend-only module for buyers; backend authorization still applies per endpoint.
     if (moduleName === "r_buyer_offer" || moduleName === "r_buyer_won") {
       return { read: true, create: false, update: false, delete: false };
@@ -504,8 +513,11 @@
     const isAdmin = window.SD_USER?.isAdmin === true;
     const isAuctioneer = window.SD_USER?.isAuctioneer === true;
     const isBuyer = window.SD_USER?.isBuyer === true;
+    const roleName = String(window.SD_USER?.roleName || "").trim().toLowerCase();
+    const isAuditor = roleName.includes("auditor") || roleName.includes("audit");
     const buyerAllowedModules = new Set(["r_buyer_offer", "r_buyer_won"]);
     const auctioneerBlockedModules = new Set(["r_module", "r_role", "r_access"]);
+    const auditorAllowedModules = new Set(["r_log"]);
 
     getMenuItems().forEach((item) => {
       const moduleName = item.getAttribute("data-module");
@@ -516,7 +528,8 @@
       const buyerBlocked = window.SD_USER?.isBuyer === true && moduleName === "r_asset";
       const buyerRoleAllowed = !isBuyer || buyerAllowedModules.has(moduleName);
       const auctioneerBlocked = isAuctioneer && auctioneerBlockedModules.has(moduleName);
-      const roleAllowed = (!onlyAdmin || isAdmin || isAuctioneer) && (!onlyBuyer || isBuyer) && !buyerBlocked && buyerRoleAllowed && !auctioneerBlocked;
+      const auditorBlocked = isAuditor && !auditorAllowedModules.has(moduleName);
+      const roleAllowed = (!onlyAdmin || isAdmin || isAuctioneer) && (!onlyBuyer || isBuyer) && !buyerBlocked && buyerRoleAllowed && !auctioneerBlocked && !auditorBlocked;
       const visible = roleAllowed && canRead;
 
       item.hidden = visible === false;

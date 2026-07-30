@@ -2508,6 +2508,80 @@ router.use(
   })
 );
 
+router.get(
+  "/r_log/audit-trail",
+  requireAuth,
+  requireModuleAccess("r_log", "read"),
+  async (req, res, next) => {
+    try {
+      const takeRaw = Number.parseInt(String(req.query.take || "100"), 10);
+      const skipRaw = Number.parseInt(String(req.query.skip || "0"), 10);
+      const take = Number.isFinite(takeRaw) ? Math.min(Math.max(takeRaw, 1), 500) : 100;
+      const skip = Number.isFinite(skipRaw) ? Math.max(skipRaw, 0) : 0;
+
+      const actorId = String(req.query.actorId || "").trim();
+      const actorLogin = String(req.query.actorLogin || "").trim();
+      const action = String(req.query.action || "").trim();
+
+      const andWhere = [];
+      if (actorId) {
+        andWhere.push({
+          log: {
+            path: ["actor", "id_user"],
+            equals: actorId,
+          },
+        });
+      }
+
+      if (actorLogin) {
+        andWhere.push({
+          log: {
+            path: ["actor", "login"],
+            equals: actorLogin,
+          },
+        });
+      }
+
+      if (action) {
+        andWhere.push({
+          tp_log: {
+            contains: action,
+            mode: "insensitive",
+          },
+        });
+      }
+
+      const where = andWhere.length ? { AND: andWhere } : {};
+
+      const [rows, total] = await Promise.all([
+        prisma.r_log.findMany({
+          where,
+          orderBy: [
+            { ins_at: "desc" },
+            { id_log: "desc" },
+          ],
+          take,
+          skip,
+        }),
+        prisma.r_log.count({ where }),
+      ]);
+
+      return res.json(jsonSafe({
+        ok: true,
+        data: rows,
+        meta: {
+          total,
+          take,
+          skip,
+          hasMore: skip + rows.length < total,
+        },
+      }));
+    } catch (err) {
+      return next(err);
+    }
+  }
+);
+
 router.use(
   "/r_log",
   createCrudRouter({
