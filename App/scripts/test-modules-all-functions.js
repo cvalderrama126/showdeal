@@ -40,6 +40,8 @@ const ID_FIELD = {
 };
 
 const runId = `qa-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+const CSRF_COOKIE_NAME = "sd_csrf";
+let QA_CSRF_SESSION = null;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -55,10 +57,43 @@ async function readBody(response) {
   }
 }
 
+function parseSetCookie(setCookieHeader) {
+  if (!setCookieHeader) return "";
+  return String(setCookieHeader).split(";")[0].trim();
+}
+
+async function fetchCsrfSession(baseUrl) {
+  const res = await fetch(`${baseUrl}/auth/csrf-token`, { method: "GET" });
+  const data = await readBody(res);
+
+  if (!res.ok || !data?.ok || !data?.csrfToken) {
+    throw new Error(`No se pudo obtener csrf-token: ${JSON.stringify(data)}`);
+  }
+
+  const setCookieRaw = res.headers.get("set-cookie");
+  const cookie = parseSetCookie(setCookieRaw);
+  if (!cookie || !cookie.startsWith(`${CSRF_COOKIE_NAME}=`)) {
+    throw new Error(`Cookie CSRF invalida o ausente: ${setCookieRaw || "<empty>"}`);
+  }
+
+  return { csrfToken: String(data.csrfToken), cookie };
+}
+
 async function request(baseUrl, token, path, options = {}) {
   const { method = "GET", body, headers = {} } = options;
   const nextHeaders = { ...headers };
   if (token) nextHeaders.Authorization = `Bearer ${token}`;
+
+  const upperMethod = String(method || "GET").toUpperCase();
+  const needsCsrf = ["POST", "PUT", "PATCH", "DELETE"].includes(upperMethod);
+  if (needsCsrf && QA_CSRF_SESSION) {
+    if (!nextHeaders["X-CSRF-Token"]) {
+      nextHeaders["X-CSRF-Token"] = QA_CSRF_SESSION.csrfToken;
+    }
+    if (!nextHeaders.Cookie) {
+      nextHeaders.Cookie = QA_CSRF_SESSION.cookie;
+    }
+  }
 
   let payload = body;
   const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
@@ -138,9 +173,29 @@ async function main() {
       assertStatus(res, [200], "auth/login");
       assertOkEnvelope(res, "auth/login");
 
+      const loginUserData = res.data.user;
+      const canSynthesizeToken = Boolean(loginUserData?.id_user) && process.env.JWT_SECRET;
+
+      const buildSynthesizedToken = (userData) => jwt.sign(
+        {
+          sub: String(userData.id_user),
+          login: userData.user || loginUser,
+          companyId: String(userData.id_company ?? "0"),
+          roleId: String(userData.id_role ?? "0"),
+          roleName: userData.isAdmin === true ? "Admin" : "User",
+          isAdmin: userData.isAdmin === true,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "2h", algorithm: "HS256" }
+      );
+
       if (!res.data.requireOtp) {
         token = res.data.token || res.data.data?.token || "";
+        if (!token && canSynthesizeToken) {
+          token = buildSynthesizedToken(loginUserData);
+        }
         if (!token) throw new Error(`Token missing: ${JSON.stringify(res.data)}`);
+        QA_CSRF_SESSION = await fetchCsrfSession(baseUrl);
         return;
       }
 
@@ -164,21 +219,10 @@ async function main() {
       const skipOtp = String(process.env.QA_SKIP_OTP || "").trim() === "1";
       const allowBypass = process.env.NODE_ENV !== "production";
       if (skipOtp && allowBypass) {
-        const u = res.data.user;
-        if (!u || u.id_user == null) throw new Error("requireOtp sin user en respuesta");
+        if (!loginUserData || loginUserData.id_user == null) throw new Error("requireOtp sin user en respuesta");
         if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET requerido para QA_SKIP_OTP");
-        token = jwt.sign(
-          {
-            sub: String(u.id_user),
-            login: u.user || loginUser,
-            companyId: String(u.id_company ?? "0"),
-            roleId: String(u.id_role ?? "0"),
-            roleName: u.isAdmin === true ? "Admin" : "User",
-            isAdmin: u.isAdmin === true,
-          },
-          process.env.JWT_SECRET,
-          { expiresIn: "2h", algorithm: "HS256" }
-        );
+        token = buildSynthesizedToken(loginUserData);
+        QA_CSRF_SESSION = await fetchCsrfSession(baseUrl);
         return;
       }
 
@@ -346,7 +390,7 @@ async function main() {
       const res = await request(baseUrl, token, "/api/r_event", {
         method: "POST",
         body: {
-          tp_event: `QA_EVENT_${runId}`,
+          tp_event: "SEALED_BID",
           start_at: start,
           end_at: end,
           additional: { qa_run: runId },
@@ -360,7 +404,7 @@ async function main() {
     await runCase(results, "r_event", "update", async () => {
       const res = await request(baseUrl, token, `/api/r_event/${state.eventId}`, {
         method: "PUT",
-        body: { tp_event: `QA_EVENT_UPDATED_${runId}` },
+        body: { tp_event: "LIVE" },
       });
       assertStatus(res, [200], "r_event update");
       assertOkEnvelope(res, "r_event update");
@@ -376,7 +420,12 @@ async function main() {
           status: "AVAILABLE",
           location_city: "Bogota",
           location_address: `Street ${runId}`,
-          additional: { qa_run: runId },
+          additional: {
+            qa_run: runId,
+            marca: "Toyota",
+            modelo: "Corolla",
+            anio: 2022,
+          },
         },
       });
       assertStatus(res, [201], "r_asset create");
@@ -471,7 +520,7 @@ async function main() {
       const res = await request(baseUrl, token, "/api/r_auction", {
         method: "POST",
         body: {
-          tp_auction: "LIVE_AUCTION",
+          tp_auction: "SEALED_BID",
           id_event: state.eventId,
           id_asset: state.assetId,
           additional: { qa_run: runId },

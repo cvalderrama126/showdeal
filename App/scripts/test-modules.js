@@ -42,16 +42,45 @@ function assertJwtSecret() {
   }
 }
 
-function buildAdminToken() {
+async function buildAdminToken() {
   assertJwtSecret();
+
+  const adminUser = await prisma.r_user.findFirst({
+    where: {
+      is_active: true,
+      OR: [{ id_role: 0n }, { id_role: 1n }],
+    },
+    orderBy: { id_user: "asc" },
+    select: {
+      id_user: true,
+      user_1: true,
+      id_company: true,
+      id_role: true,
+      r_role: {
+        select: {
+          role: true,
+          additional: true,
+        },
+      },
+    },
+  });
+
+  if (!adminUser) {
+    throw new Error("No se encontró un usuario admin activo para QA");
+  }
+
+  const roleName = String(adminUser.r_role?.role || "Admin");
+  const isAdmin = adminUser.r_role?.additional?.is_admin === true || roleName === "Root" || roleName === "Admin";
+
   return jwt.sign(
     {
       // Debe ser un id numérico > 0: rutas como /api/r_buyer_offer validan el subject.
-      sub: "1",
-      login: "smoke-admin",
-      roleId: "1",
-      isAdmin: true,
-      roleName: "Admin",
+      sub: String(adminUser.id_user),
+      login: adminUser.user_1,
+      companyId: String(adminUser.id_company ?? "0"),
+      roleId: String(adminUser.id_role ?? "0"),
+      isAdmin,
+      roleName,
     },
     process.env.JWT_SECRET,
     { expiresIn: "10m" }
@@ -122,7 +151,7 @@ async function main() {
   const app = createApp();
   const server = await listen(app);
   const port = server.address().port;
-  const token = buildAdminToken();
+  const token = await buildAdminToken();
   const results = [];
 
   try {

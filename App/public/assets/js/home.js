@@ -236,7 +236,7 @@
     if (moduleName === "r_asset" && window.SD_USER?.isBuyer === true) {
       return { read: false, create: false, update: false, delete: false };
     }
-    return window.SD_PERMISSIONS?.[moduleName] || { read: true, create: true, update: true, delete: true };
+    return window.SD_PERMISSIONS?.[moduleName] || { read: false, create: false, update: false, delete: false };
   }
 
   function setActive(moduleName) {
@@ -517,14 +517,15 @@
       const buyerRoleAllowed = !isBuyer || buyerAllowedModules.has(moduleName);
       const auctioneerBlocked = isAuctioneer && auctioneerBlockedModules.has(moduleName);
       const roleAllowed = (!onlyAdmin || isAdmin || isAuctioneer) && (!onlyBuyer || !isAdmin) && !buyerBlocked && buyerRoleAllowed && !auctioneerBlocked;
+      const visible = roleAllowed && canRead;
 
-      item.hidden = roleAllowed === false;
+      item.hidden = visible === false;
       item.classList.remove("active");
-      item.classList.toggle("opacity-50", !canRead && roleAllowed);
+      item.classList.toggle("opacity-50", false);
       item.setAttribute("data-can-read", canRead ? "1" : "0");
-      if (roleAllowed) {
+      if (visible) {
         allModules.push(moduleName);
-        if (canRead) readableModules.push(moduleName);
+        readableModules.push(moduleName);
       }
     });
 

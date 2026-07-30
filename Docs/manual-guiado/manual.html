@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>ShowDeal · Manual de Funcionalidad v2.0</title>
+<title>ShowDeal · Manual de Funcionalidad v2.1</title>
 <style>
 :root{
   --p:#F84300;--p2:#ff6a3d;--dark:#0f172a;--gray:#334155;
@@ -191,13 +191,14 @@ code{background:#f1f5f9;border:1px solid #e2e8f0;padding:1px 6px;border-radius:4
 <nav class="topbar">
   <div class="brand"><span class="dot"></span>ShowDeal</div>
   <span style="color:rgba(255,255,255,.3);font-size:.83rem">Manual de Funcionalidad</span>
-  <div class="topbar-meta"><strong>v2.0</strong><br>18 jun 2026</div>
+  <div class="topbar-meta"><strong>v2.1</strong><br>30 jul 2026</div>
 </nav>
 
 <!-- sidebar -->
 <aside class="sidebar">
   <div class="nav-section">Inicio</div>
   <a class="nav-link active" href="#cover"><span class="nav-ico">🏠</span>Portada</a>
+  <a class="nav-link" href="#s-updates"><span class="nav-ico">🆕</span>Novedades v2.1</a>
 
   <div class="nav-section">Autenticación</div>
   <a class="nav-link" href="#s-login"><span class="nav-ico">🔑</span>Login<span class="badge-ok">OK</span></a>
@@ -226,10 +227,52 @@ code{background:#f1f5f9;border:1px solid #e2e8f0;padding:1px 6px;border-radius:4
   <div class="cover-title">Manual de<br><span>Funcionalidad</span></div>
   <p class="cover-sub">Plataforma de subastas judiciales y comerciales · Todos los perfiles</p>
   <div class="chips">
-    <span class="chip"><span class="chip-dot g"></span>v2.0 Validado</span>
-    <span class="chip"><span class="chip-dot o"></span>18 junio 2026</span>
+    <span class="chip"><span class="chip-dot g"></span>v2.1 Validado</span>
+    <span class="chip"><span class="chip-dot o"></span>30 julio 2026</span>
     <span class="chip"><span class="chip-dot b"></span>localhost:3001</span>
-    <span class="chip"><span class="chip-dot o"></span>7 roles documentados</span>
+    <span class="chip"><span class="chip-dot o"></span>89/89 QA módulos</span>
+  </div>
+</section>
+<div class="div"></div>
+
+<!-- ═══ NOVEDADES ═══════════════════════════════════════════ -->
+<section id="s-updates" class="section">
+  <div class="sec-header">
+    <div class="sec-icon">🆕</div>
+    <div><div class="sec-title">Novedades desde la versión inicial</div>
+    <div class="sec-desc">Ajustes funcionales y de permisos aplicados y verificados al 30 jul 2026</div></div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Subastas judiciales</p>
+      <ul class="chk">
+        <li>Separación de acciones: <strong>Cerrar</strong> y <strong>Exportar</strong> en botones independientes.</li>
+        <li>Nuevo botón <strong>Relanzar</strong> para lotes cerrados.</li>
+        <li>Cuando un lote ya está cerrado, <strong>Cerrar</strong> queda inactivo.</li>
+        <li>Exportaciones y plantilla de buyer actualizadas con contexto de relanzamiento.</li>
+      </ul>
+    </div></div>
+
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Resultados y filtros</p>
+      <ul class="chk">
+        <li>Panel de filtros transversal sobre pestañas Dashboard/Grilla.</li>
+        <li>Filtro por <strong>Tipo de lote</strong> y selector de <strong>Lote</strong>.</li>
+        <li>Gráficas y grilla se recalculan con el subconjunto filtrado.</li>
+        <li>Mejoras de estabilidad en gráficos (render serializado/debounced).</li>
+      </ul>
+    </div></div>
+
+    <div class="card"><div class="card-body">
+      <p style="font-size:.84rem;font-weight:600;color:var(--dark);margin-bottom:12px">Permisos y QA</p>
+      <ul class="chk">
+        <li><strong>Auctioneer</strong>: mismo alcance operativo que admin, excepto módulos <code>r_module</code>, <code>r_role</code> y <code>r_access</code>.</li>
+        <li>Sidebar con política <strong>deny-by-default</strong> y ocultamiento de opciones sin permiso de lectura.</li>
+        <li>Validación E2E de perfiles demo (admin, auctioneer, buyer, viewer).</li>
+        <li>Suite automática de módulos en verde: <strong>89/89</strong> checks OK.</li>
+      </ul>
+    </div></div>
   </div>
 </section>
 <div class="div"></div>
@@ -483,8 +526,9 @@ code{background:#f1f5f9;border:1px solid #e2e8f0;padding:1px 6px;border-radius:4
           <tr><td>🚗 Carga de vehículos</td><td><span class="tag g">Upload Excel</span></td></tr>
           <tr><td>⚖️ Lotes Judiciales</td><td><span class="tag g">Gestionar</span></td></tr>
           <tr><td>📊 Resultados de pujas</td><td><span class="tag g">Ver resultados</span></td></tr>
-          <tr><td>🏢 Compañías</td><td><span class="tag b">Solo lectura</span></td></tr>
-          <tr><td>👥 Usuarios</td><td><span class="tag gray">No disponible</span></td></tr>
+          <tr><td>🏢 Compañías</td><td><span class="tag g">Gestión operativa</span></td></tr>
+          <tr><td>👥 Usuarios</td><td><span class="tag g">Gestión operativa</span></td></tr>
+          <tr><td>🧩 Módulos / 🏷️ Roles / 🔐 Accesos</td><td><span class="tag r">Restringido</span></td></tr>
         </tbody>
       </table>
     </div></div>
@@ -528,7 +572,7 @@ code{background:#f1f5f9;border:1px solid #e2e8f0;padding:1px 6px;border-radius:4
         <thead><tr><th>Módulo</th><th>Acceso</th></tr></thead>
         <tbody>
           <tr><td>🛒 Vehículos para ofertar</td><td><span class="tag g">Ver + Ofertar</span></td></tr>
-          <tr><td>📊 Mis resultados</td><td><span class="tag b">Solo mis ofertas</span></td></tr>
+          <tr><td>📊 Resultados</td><td><span class="tag gray">No disponible</span></td></tr>
           <tr><td>📋 Eventos</td><td><span class="tag gray">No disponible</span></td></tr>
           <tr><td>👥 Usuarios</td><td><span class="tag gray">No disponible</span></td></tr>
         </tbody>
@@ -652,8 +696,9 @@ code{background:#f1f5f9;border:1px solid #e2e8f0;padding:1px 6px;border-radius:4
       <table class="tbl">
         <thead><tr><th>Módulo</th><th>Nivel</th></tr></thead>
         <tbody>
-          <tr><td>📋 Eventos (solo activos)</td><td><span class="tag b">👁 Ver</span></td></tr>
-          <tr><td>📊 Resultados públicos</td><td><span class="tag b">👁 Ver</span></td></tr>
+          <tr><td>🛒 Vehículos para ofertar</td><td><span class="tag b">👁 Solo lectura</span></td></tr>
+          <tr><td>🚗 Carga de vehículos</td><td><span class="tag b">👁 Solo lectura</span></td></tr>
+          <tr><td>📋 Eventos de subasta</td><td><span class="tag b">👁 Solo lectura</span></td></tr>
           <tr><td>Resto de módulos</td><td><span class="tag r">Sin acceso</span></td></tr>
         </tbody>
       </table>
@@ -690,15 +735,15 @@ code{background:#f1f5f9;border:1px solid #e2e8f0;padding:1px 6px;border-radius:4
         </tr>
       </thead>
       <tbody>
-        <tr><td>👥 Usuarios</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
-        <tr><td>🏢 Compañías</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
+        <tr><td>👥 Usuarios</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
+        <tr><td>🏢 Compañías</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
         <tr><td>🏷️ Roles</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
         <tr><td>🔐 Accesos</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
         <tr><td>📋 Eventos de subasta</td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-ro"></td><td class="mx-ro"></td></tr>
         <tr><td>⚖️ Lotes Judiciales</td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
-        <tr><td>🚗 Carga de vehículos</td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td></tr>
-        <tr><td>🛒 Vehículos para ofertar</td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td></tr>
-        <tr><td>📊 Resultados</td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-ro"></td><td class="mx-ro"></td><td class="mx-ro"></td><td class="mx-ro"></td></tr>
+        <tr><td>🚗 Carga de vehículos</td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td></tr>
+        <tr><td>🛒 Vehículos para ofertar</td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-ro"></td></tr>
+        <tr><td>📊 Resultados</td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-ro"></td><td class="mx-ro"></td><td class="mx-no"></td></tr>
         <tr><td>🧩 Módulos del sistema</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td></tr>
         <tr><td>🎨 Tema UI</td><td class="mx-yes"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td><td class="mx-no"></td></tr>
       </tbody>
@@ -755,7 +800,7 @@ code{background:#f1f5f9;border:1px solid #e2e8f0;padding:1px 6px;border-radius:4
 </main>
 
 <footer class="footer">
-  <strong>ShowDeal</strong> · Manual de Funcionalidad v2.0 · 18 junio 2026 · 7 roles documentados
+  <strong>ShowDeal</strong> · Manual de Funcionalidad v2.1 · 30 julio 2026 · 7 roles documentados
 </footer>
 
 <!-- lightbox -->

@@ -4,7 +4,13 @@ const multer = require("multer");
 let _fileTypePromise = null;
 function getFileTypeFromBuffer() {
   if (!_fileTypePromise) {
-    _fileTypePromise = import("file-type").then((m) => m.fileTypeFromBuffer);
+    _fileTypePromise = import("file-type").then((m) => {
+      const fn = m?.fileTypeFromBuffer || m?.default?.fileTypeFromBuffer || m?.default?.fromBuffer || m?.default;
+      if (typeof fn !== "function") {
+        throw new Error("FILE_TYPE_LIBRARY_INVALID");
+      }
+      return fn;
+    });
   }
   return _fileTypePromise;
 }
