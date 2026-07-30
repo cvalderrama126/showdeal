@@ -190,6 +190,35 @@ function mapAuctionResolutionRow(auction) {
   };
 }
 
+function sanitizeDownloadFileName(fileName, fallback = "archivo.bin") {
+  const raw = String(fileName || "").trim();
+  const candidate = raw || fallback;
+  return candidate.replace(/[\\/:*?"<>|\r\n]+/g, "_");
+}
+
+function isBuyerAuth(auth) {
+  const roleName = String(auth?.roleName || "").trim().toLowerCase();
+  return roleName.includes("buyer") || roleName.includes("comprador");
+}
+
+function isAppraisalAttachmentType(tpAttach) {
+  return /avalu|apprais/i.test(String(tpAttach || ""));
+}
+
+function didUserWinAuction(auction, idUser) {
+  const summary = normalizeAuctionResolution(auction, auction?.r_bid || []);
+  const additional = jsonClone(auction?.additional);
+  const resolutionWinnerId = toBigIntId(additional?.resolution?.winner?.id_user);
+
+  if (resolutionWinnerId) {
+    return String(resolutionWinnerId) === String(idUser);
+  }
+
+  const fallbackWinner = summary.winnerBid?.id_user ? BigInt(String(summary.winnerBid.id_user)) : null;
+  if (!fallbackWinner) return false;
+  return String(fallbackWinner) === String(idUser);
+}
+
 async function getAuctionWithResolutionContext(idAuction) {
   return prisma.r_auction.findUnique({
     where: { id_auction: idAuction },
@@ -1738,6 +1767,231 @@ router.get("/r_buyer_offer", requireAuth, async (req, res, next) => {
     }).filter((row) => row.event_status === "VIGENTE");
 
     return res.json({ ok: true, data: jsonSafe(data) });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get("/r_buyer_won", requireAuth, async (req, res, next) => {
+  try {
+    const idUser = toBigIntId(req.auth?.sub);
+    if (!idUser) {
+      return res.status(401).json({ ok: false, error: "INVALID_USER_IN_TOKEN" });
+    }
+
+    if (req.auth?.isAdmin !== true && !isBuyerAuth(req.auth)) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN_BUYER_ONLY" });
+    }
+
+    const auctions = await prisma.r_auction.findMany({
+      where: {
+        is_active: true,
+        r_asset: {
+          is: {
+            is_active: true,
+          },
+        },
+        r_bid: {
+          some: {
+            id_user: idUser,
+            is_active: true,
+          },
+        },
+      },
+      orderBy: { id_auction: "desc" },
+      include: {
+        r_asset: {
+          select: {
+            id_asset: true,
+            tp_asset: true,
+            uin: true,
+            status: true,
+            appraised_value: true,
+            location_city: true,
+            additional: true,
+            r_attach: {
+              where: { is_active: true },
+              orderBy: { id_attach: "desc" },
+              select: {
+                id_attach: true,
+                tp_attach: true,
+                file_name: true,
+                mime_type: true,
+                file_size_bytes: true,
+                ins_at: true,
+                file_content: true,
+              },
+            },
+          },
+        },
+        r_event: {
+          select: {
+            id_event: true,
+            start_at: true,
+            end_at: true,
+          },
+        },
+        r_bid: {
+          where: { is_active: true },
+          select: {
+            id_bid: true,
+            id_user: true,
+            value: true,
+            ins_at: true,
+          },
+        },
+      },
+      take: 1000,
+    });
+
+    const uniqueWonAssets = new Map();
+
+    for (const auction of auctions) {
+      if (!didUserWinAuction(auction, idUser)) continue;
+
+      const idAssetKey = String(auction?.r_asset?.id_asset || "").trim();
+      if (!idAssetKey) continue;
+
+      const current = uniqueWonAssets.get(idAssetKey);
+      if (current && Number(current.id_auction || 0) > Number(auction.id_auction || 0)) {
+        continue;
+      }
+
+      const summary = normalizeAuctionResolution(auction, auction?.r_bid || []);
+      const additional = jsonClone(auction?.additional);
+      const assetAdditional = jsonClone(auction?.r_asset?.additional);
+
+      const brand = getStringFromAdditional(assetAdditional, ["brand", "marca", "make"]);
+      const model = getStringFromAdditional(assetAdditional, ["model", "modelo"]);
+      const year = getStringFromAdditional(assetAdditional, ["year", "anio"]);
+      const appraisedValue = Number(auction?.r_asset?.appraised_value || 0);
+
+      const attachments = (auction?.r_asset?.r_attach || []).map((attach) => {
+        const isAppraisal = isAppraisalAttachmentType(attach?.tp_attach);
+        const idAttach = String(attach?.id_attach || "").trim();
+        const idAsset = String(auction?.r_asset?.id_asset || "").trim();
+        return {
+          id_attach: attach.id_attach,
+          tp_attach: String(attach?.tp_attach || ""),
+          file_name: attach?.file_name || null,
+          mime_type: attach?.mime_type || null,
+          file_size_bytes: attach?.file_size_bytes || null,
+          has_file: Buffer.isBuffer(attach?.file_content),
+          is_appraisal: isAppraisal,
+          uploaded_at: attach?.ins_at || null,
+          download_url: idAttach && idAsset
+            ? `/api/r_buyer_won/${encodeURIComponent(idAsset)}/attachments/${encodeURIComponent(idAttach)}/download`
+            : null,
+        };
+      });
+
+      const appraisalDocs = attachments.filter((item) => item.is_appraisal);
+      const otherDocs = attachments.filter((item) => !item.is_appraisal);
+
+      uniqueWonAssets.set(idAssetKey, {
+        id_asset: auction?.r_asset?.id_asset,
+        id_auction: auction?.id_auction,
+        id_event: auction?.r_event?.id_event || null,
+        tp_asset: auction?.r_asset?.tp_asset || null,
+        plate: normalizePlate(auction?.r_asset?.uin),
+        city: String(auction?.r_asset?.location_city || "").trim(),
+        brand: brand || "",
+        model: model || "",
+        year: year || "",
+        asset_status: auction?.r_asset?.status || null,
+        won_value: summary.topValue,
+        resolved_at: additional?.resolution?.resolved_at || summary.winnerBid?.ins_at || null,
+        appraised_value: appraisedValue,
+        appraisal_available: appraisedValue > 0 || appraisalDocs.length > 0,
+        documents_available: otherDocs.length > 0,
+        appraisal_documents: appraisalDocs,
+        documents: otherDocs,
+      });
+    }
+
+    const data = Array.from(uniqueWonAssets.values()).sort((left, right) => {
+      const leftAt = new Date(left.resolved_at || 0).getTime();
+      const rightAt = new Date(right.resolved_at || 0).getTime();
+      if (rightAt !== leftAt) return rightAt - leftAt;
+      return Number(right.id_asset || 0) - Number(left.id_asset || 0);
+    });
+
+    return res.json({ ok: true, data: jsonSafe(data) });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get("/r_buyer_won/:id_asset/attachments/:id_attach/download", requireAuth, async (req, res, next) => {
+  try {
+    const idUser = toBigIntId(req.auth?.sub);
+    if (!idUser) {
+      return res.status(401).json({ ok: false, error: "INVALID_USER_IN_TOKEN" });
+    }
+
+    if (req.auth?.isAdmin !== true && !isBuyerAuth(req.auth)) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN_BUYER_ONLY" });
+    }
+
+    const idAsset = toBigIntId(req.params?.id_asset);
+    const idAttach = toBigIntId(req.params?.id_attach);
+    if (!idAsset || !idAttach) {
+      return res.status(400).json({ ok: false, error: "INVALID_ID" });
+    }
+
+    const auctions = await prisma.r_auction.findMany({
+      where: {
+        is_active: true,
+        id_asset: idAsset,
+      },
+      select: {
+        additional: true,
+        r_bid: {
+          where: { is_active: true },
+          select: {
+            id_bid: true,
+            id_user: true,
+            value: true,
+            ins_at: true,
+          },
+        },
+      },
+      take: 100,
+    });
+
+    const wonAsset = auctions.some((auction) => didUserWinAuction(auction, idUser));
+    if (!wonAsset) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN_ASSET_NOT_WON" });
+    }
+
+    const attachment = await prisma.r_attach.findFirst({
+      where: {
+        id_attach: idAttach,
+        id_asset: idAsset,
+        is_active: true,
+      },
+      select: {
+        id_attach: true,
+        file_name: true,
+        mime_type: true,
+        file_content: true,
+      },
+    });
+
+    if (!attachment) {
+      return res.status(404).json({ ok: false, error: "ATTACHMENT_NOT_FOUND" });
+    }
+
+    if (!Buffer.isBuffer(attachment.file_content)) {
+      return res.status(404).json({ ok: false, error: "ATTACHMENT_FILE_NOT_FOUND" });
+    }
+
+    const fileName = sanitizeDownloadFileName(attachment.file_name, `adjunto-${idAttach}.bin`);
+    const mimeType = String(attachment.mime_type || "application/octet-stream");
+
+    res.setHeader("Content-Type", mimeType);
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    return res.send(Buffer.from(attachment.file_content));
   } catch (err) {
     return next(err);
   }

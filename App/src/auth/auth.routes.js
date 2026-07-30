@@ -5,7 +5,7 @@ const { z } = require("zod");
 const rateLimit = require("express-rate-limit");
 const { prisma } = require("../db/prisma");
 const { requireAuth, jsonSafe } = require("./auth.middleware");
-const { login, verifyOtp, otpSetup, otpEnable, otpDisable, changePassword, changePasswordForced } = require("./auth.service");
+const { login, verifyOtp, otpSetup, otpEnable, otpDisable, otpRequire, changePassword, changePasswordForced } = require("./auth.service");
 const { getModulePermissions } = require("../routes/access.guard");
 const { audit } = require("../utils/audit.service");
 const passwordResetRoutes = require("./password-reset.routes");
@@ -364,6 +364,27 @@ router.post("/otp/disable/:id_user", requireAuth, csrfProtection, async (req, re
   }
 });
 
+router.post("/otp/require/:id_user", requireAuth, csrfProtection, async (req, res, next) => {
+  try {
+    const idUser = req.params.id_user;
+    if (!idUser || !/^\d+$/.test(String(idUser))) {
+      return res.status(400).json({ ok: false, error: "INVALID_USER_ID" });
+    }
+
+    if (!canManageOtpForUser(req, idUser)) {
+      return res.status(403).json({ ok: false, error: "FORBIDDEN" });
+    }
+
+    const result = await otpRequire({ id_user: idUser });
+    if (result?.ok) {
+      audit({ req, action: "OTP_REQUIRE", entity: "r_user", entityId: idUser });
+    }
+    return respondWithResult(res, result);
+  } catch (err) {
+    return next(err);
+  }
+});
+
 router.post("/password/change", requireAuth, csrfProtection, async (req, res, next) => {
   try {
     const idUser = req.auth?.sub;
@@ -449,7 +470,8 @@ router.get("/permissions", requireAuth, async (req, res, next) => {
       .filter(Boolean);
 
     const roleName = String(req.auth?.roleName || "");
-    const isBuyer = roleName.toLowerCase().includes("buyer");
+    const normalizedRole = roleName.toLowerCase();
+    const isBuyer = normalizedRole.includes("buyer") || normalizedRole.includes("comprador");
 
     const data = await getModulePermissions({
       roleId: BigInt(String(roleId)),

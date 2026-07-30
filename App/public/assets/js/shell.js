@@ -37,7 +37,13 @@ function paintUser() {
   async function checkFirstLogin() {
     const params = new URLSearchParams(window.location.search);
     const firstLogin = params.get("first_login") === "1";
-    if (!firstLogin) return;
+    const otpSetupRequired = params.get("otp_setup") === "1";
+    if (!firstLogin && !otpSetupRequired) return;
+
+    window.firstLoginContext = {
+      requirePasswordChange: firstLogin,
+      otpSetupRequired,
+    };
 
     // Remove query param from URL
     window.history.replaceState({}, document.title, window.location.pathname);
@@ -63,9 +69,13 @@ function paintUser() {
       if (otpSetup?.secret && otpSetup?.otpauth_url) {
         showOtpSetupSection(otpSetup);
       } else {
-        // Only show password change
-        document.getElementById("otpSetupSection").style.display = "none";
-        document.getElementById("passwordSection").style.display = "block";
+        if (window.firstLoginContext?.requirePasswordChange) {
+          document.getElementById("otpSetupSection").style.display = "none";
+          document.getElementById("passwordSection").style.display = "block";
+        } else {
+          document.getElementById("otpSetupSection").style.display = "none";
+          document.getElementById("passwordSection").style.display = "none";
+        }
       }
 
       // Bind form submits
@@ -81,6 +91,8 @@ function paintUser() {
 
       const skipBtn = document.getElementById("skipOtpBtn");
       if (skipBtn) {
+        skipBtn.disabled = window.firstLoginContext?.otpSetupRequired === true;
+        skipBtn.style.display = window.firstLoginContext?.otpSetupRequired === true ? "none" : "inline-block";
         skipBtn.addEventListener("click", handleSkipOtp);
       }
     }, 300);
@@ -102,7 +114,6 @@ function paintUser() {
     window.currentOtpSetup = {
       secret: otpSetup.secret,
       otpauth_url: otpSetup.otpauth_url,
-      userId: getSession()?.user?.id_user,
     };
   }
 
@@ -120,10 +131,7 @@ function paintUser() {
     if (btn) btn.disabled = true;
 
     try {
-      const userId = window.currentOtpSetup?.userId;
-      if (!userId) throw new Error("No se encontró ID de usuario");
-
-      const resp = await fetch(`/auth/otp/enable/${userId}`, {
+      const resp = await fetch("/auth/otp/enable", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -141,8 +149,14 @@ function paintUser() {
         return;
       }
 
-      // OTP validated, now change password
-      showPasswordSection();
+      if (window.firstLoginContext?.requirePasswordChange === true) {
+        showPasswordSection();
+      } else {
+        const modal = bootstrap.Modal.getInstance(document.getElementById("firstLoginModal"));
+        if (modal) modal.hide();
+        clearFirstLoginOtpSetup();
+        alert("✅ OTP configurado correctamente. En el próximo inicio de sesión se solicitará tu código OTP.");
+      }
     } catch (err) {
       alert("Error: " + err.message);
       if (btn) btn.disabled = false;
@@ -151,7 +165,7 @@ function paintUser() {
 
   async function handleSkipOtp(ev) {
     ev.preventDefault();
-    const confirmed = confirm("¿Omitir la configuración de OTP por ahora? Puedes hacerlo después desde el módulo de Usuarios.");
+    const confirmed = confirm("¿Omitir la configuración de OTP por ahora? Podrás habilitarlo luego desde tu propia sesión.");
     if (!confirmed) return;
 
     // Go directly to password change
@@ -242,10 +256,7 @@ function paintUser() {
   }
 
   async function fetchFirstLoginOtpSetup() {
-    const userId = getSession()?.user?.id_user;
-    if (!userId) return null;
-
-    const response = await fetch(`/auth/otp/setup/${userId}`, {
+    const response = await fetch("/auth/otp/setup", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

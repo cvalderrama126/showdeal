@@ -23,7 +23,7 @@ async function isBuyerRole(roleId) {
     select: { role: true },
   });
   const roleName = String(role?.role || "").trim().toLowerCase();
-  return roleName.includes("buyer");
+  return roleName.includes("buyer") || roleName.includes("comprador");
 }
 
 function allowWhenAccessMissing() {
@@ -44,7 +44,7 @@ function isRestrictedAuctioneerModule(moduleName) {
 }
 
 function isBuyerUiModuleAllowed(moduleName) {
-  return moduleName === "r_buyer_offer";
+  return ["r_buyer_offer", "r_buyer_won"].includes(String(moduleName || "").trim());
 }
 
 async function getActiveModules(moduleNames) {

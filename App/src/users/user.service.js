@@ -3,6 +3,8 @@ const { z } = require("zod");
 const { prisma } = require("../db/prisma");
 const { getLatestCredential } = require("../utils/common");
 
+const emailSchema = z.string().trim().email().max(160);
+
 function todayUtcYmdString() {
   const now = new Date();
   const y = now.getUTCFullYear();
@@ -18,10 +20,15 @@ function redactAdditional(additional) {
   if (clone.otp && typeof clone.otp === "object") {
     clone.otp = {
       enabled: clone.otp.enabled === true,
+      required: clone.otp.required === true,
       issuer: clone.otp.issuer || null,
       label: clone.otp.label || null,
       type: clone.otp.type || "totp",
     };
+  }
+
+  if (typeof clone.email === "string") {
+    clone.email = clone.email.trim().toLowerCase();
   }
 
   return clone;
@@ -42,6 +49,7 @@ function serializeUser(user, { companyMap, roleMap } = {}) {
     uin: user.uin,
     user: user.user_1,
     user_1: user.user_1,
+    email: typeof user.additional?.email === "string" ? user.additional.email : null,
     name: user.name,
     company_name: companyName,
     role_name: roleName,
@@ -53,6 +61,7 @@ function serializeUser(user, { companyMap, roleMap } = {}) {
           algorithm: latestCredential.algorithm || null,
         }
       : null,
+    otp_required: user.additional?.otp?.required === true,
     otp_enabled: user.additional?.otp?.enabled === true,
   };
 }
@@ -134,8 +143,9 @@ const userBaseSchema = z
     id_company: z.union([z.string(), z.number(), z.bigint()]),
     id_role: z.union([z.string(), z.number(), z.bigint()]),
     uin: z.string().trim().min(1),
-    user: z.string().trim().min(1).optional(),
-    user_1: z.string().trim().min(1).optional(),
+    user: z.string().trim().min(1).max(80).optional(),
+    user_1: z.string().trim().min(1).max(80).optional(),
+    email: emailSchema,
     name: z.string().trim().min(1),
     is_active: z.boolean().optional().default(true),
     additional: z.any().nullable().optional(),
@@ -177,6 +187,7 @@ function parseUserInput(input, { requirePassword }) {
   const data = parsed.data;
   const hasAdditional = Object.prototype.hasOwnProperty.call(input || {}, "additional");
   const login = String(data.user ?? data.user_1).trim();
+  const email = String(data.email || "").trim().toLowerCase();
   const passwordCreated = data.password_created ? normalizeOptionalDate(data.password_created) : todayUtcYmdString();
   const passwordExpires = normalizeOptionalDate(data.password_expires);
 
@@ -190,6 +201,7 @@ function parseUserInput(input, { requirePassword }) {
     uin: data.uin.trim(),
     user_1: login,
     name: data.name.trim(),
+    email,
     is_active: data.is_active !== false,
     additional: data.additional ?? null,
     hasAdditional,
@@ -310,7 +322,16 @@ async function createUser(input) {
       user_1: data.user_1,
       name: data.name,
       is_active: data.is_active,
-      additional: data.additional,
+      additional: {
+        ...(data.additional && typeof data.additional === "object" ? data.additional : {}),
+        email: data.email,
+        otp: {
+          ...((data.additional && typeof data.additional === "object" && data.additional.otp) || {}),
+          type: "totp",
+          required: data.additional?.otp?.required === false ? false : true,
+          enabled: data.additional?.otp?.enabled === true,
+        },
+      },
       authentication,
     },
   });
@@ -338,7 +359,18 @@ async function updateUser(id_user, input, options = {}) {
   };
 
   if (data.hasAdditional) {
-    updateData.additional = data.additional;
+    updateData.additional = {
+      ...(data.additional && typeof data.additional === "object" ? data.additional : {}),
+      email: data.email,
+    };
+  } else {
+    const currentAdditional = current.additional && typeof current.additional === "object"
+      ? { ...current.additional }
+      : {};
+    updateData.additional = {
+      ...currentAdditional,
+      email: data.email,
+    };
   }
 
   if (data.password) {

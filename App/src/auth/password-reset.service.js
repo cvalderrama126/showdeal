@@ -8,7 +8,68 @@ const crypto = require('crypto');
 const TOKEN_EXPIRY_MINUTES = 15; // 15 minutes
 const TOKEN_LENGTH = 32; // 32 bytes = 64 hex characters
 const MAX_RESET_ATTEMPTS_PER_HOUR = 3;
+const MIN_PASSWORD_LENGTH = 12;
+const MAX_PASSWORD_LENGTH = 128;
 const DUMMY_BCRYPT_HASH = bcrypt.hashSync('showdeal-password-reset-dummy', 10);
+
+function normalizeIdentity(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function evaluatePasswordStrength(password, user = null) {
+  const value = String(password || '');
+  const checks = [];
+
+  if (value.length < MIN_PASSWORD_LENGTH) {
+    checks.push(`Password must be at least ${MIN_PASSWORD_LENGTH} characters long.`);
+  }
+  if (value.length > MAX_PASSWORD_LENGTH) {
+    checks.push(`Password must be at most ${MAX_PASSWORD_LENGTH} characters long.`);
+  }
+  if (!/[a-z]/.test(value)) checks.push('Password must contain at least one lowercase letter.');
+  if (!/[A-Z]/.test(value)) checks.push('Password must contain at least one uppercase letter.');
+  if (!/\d/.test(value)) checks.push('Password must contain at least one number.');
+  if (!/[^A-Za-z0-9]/.test(value)) checks.push('Password must contain at least one special character.');
+  if (/\s/.test(value)) checks.push('Password must not contain spaces.');
+
+  const lowered = value.toLowerCase();
+  const weakFragments = ['password', '123456', 'qwerty', 'admin', 'showdeal'];
+  if (weakFragments.some((w) => lowered.includes(w))) {
+    checks.push('Password contains common weak patterns.');
+  }
+
+  if (/(.)\1{3,}/.test(value)) {
+    checks.push('Password must not contain repeated characters (4+).');
+  }
+
+  if (user?.user_1 && lowered.includes(String(user.user_1).toLowerCase())) {
+    checks.push('Password must not contain your username.');
+  }
+
+  return {
+    ok: checks.length === 0,
+    errors: checks,
+  };
+}
+
+async function resolveUserIdFromIdentity(identity) {
+  const rawIdentity = String(identity || '').trim();
+  const normalizedEmailIdentity = rawIdentity.toLowerCase();
+  if (!rawIdentity) return null;
+
+  const user = await prisma.r_user.findFirst({
+    where: {
+      is_active: true,
+      OR: [
+        { user_1: { equals: rawIdentity, mode: 'insensitive' } },
+        { additional: { path: ['email'], equals: normalizedEmailIdentity } },
+      ],
+    },
+    select: { id_user: true },
+  });
+
+  return user?.id_user || null;
+}
 
 /**
  * Generate a cryptographically secure reset token
@@ -105,18 +166,35 @@ function buildUpdatedAuthentication(authentication, hashedPassword) {
 
 /**
  * Check if user has exceeded reset attempt limit
- * @param {string} email - User email
+ * @param {bigint|string|number} userIdOrIdentity - User id or identity
  * @returns {Promise<boolean>} True if limit exceeded
  */
-async function hasExceededResetLimit(email) {
+async function hasExceededResetLimit(userIdOrIdentity) {
   try {
+    let userId = null;
+
+    if (typeof userIdOrIdentity === 'bigint') {
+      userId = userIdOrIdentity;
+    } else if (typeof userIdOrIdentity === 'number' && Number.isInteger(userIdOrIdentity) && userIdOrIdentity > 0) {
+      userId = BigInt(userIdOrIdentity);
+    } else {
+      const raw = String(userIdOrIdentity || '').trim();
+      if (/^\d+$/.test(raw)) {
+        userId = BigInt(raw);
+      } else {
+        userId = await resolveUserIdFromIdentity(raw);
+      }
+    }
+
+    if (!userId) {
+      return false;
+    }
+
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
 
     const recentAttempts = await prisma.r_password_reset_token.count({
       where: {
-        r_user: {
-          user_1: email
-        },
+        id_user: userId,
         ins_at: {
           gte: oneHourAgo
         }
@@ -135,32 +213,47 @@ async function hasExceededResetLimit(email) {
 
 /**
  * Create a password reset token for a user
- * @param {string} email - User email
+ * @param {string} identity - User email or username
  * @param {string} ipAddress - Client IP address
  * @param {string} userAgent - Client user agent
- * @returns {Promise<{success: boolean, token?: string, message: string}>}
+ * @returns {Promise<{success: boolean, token?: string, deliveryEmail?: string, message: string}>}
  */
-async function createPasswordResetToken(email, ipAddress = null, userAgent = null) {
+async function createPasswordResetToken(identity, ipAddress = null, userAgent = null) {
   try {
-    // Find user by email
+    const rawIdentity = String(identity || '').trim();
+    const normalizedEmailIdentity = rawIdentity.toLowerCase();
+
+    // Find user by login or registered notification email.
     const user = await prisma.r_user.findFirst({
       where: {
-        user_1: email,
+        is_active: true,
+        OR: [
+          { user_1: { equals: rawIdentity, mode: 'insensitive' } },
+          { additional: { path: ['email'], equals: normalizedEmailIdentity } },
+        ],
+      },
+      select: {
+        id_user: true,
+        user_1: true,
+        additional: true,
         is_active: true
       }
     });
 
     if (!user) {
       // Don't reveal if email exists or not for security
-      await performConstantTimeDummyWork(email);
+      await performConstantTimeDummyWork(rawIdentity);
       return {
         success: true,
         message: 'If the email exists, a reset link has been sent.'
       };
     }
 
+    const deliveryEmail = normalizeIdentity(user?.additional?.email);
+    const hasDeliveryEmail = Boolean(deliveryEmail && deliveryEmail.includes('@'));
+
     // Check rate limiting
-    if (await hasExceededResetLimit(email)) {
+    if (await hasExceededResetLimit(user.id_user)) {
       return {
         success: false,
         message: 'Too many reset attempts. Please try again later.'
@@ -189,6 +282,7 @@ async function createPasswordResetToken(email, ipAddress = null, userAgent = nul
     return {
       success: true,
       token: token,
+      deliveryEmail: hasDeliveryEmail ? deliveryEmail : null,
       message: 'Password reset token created successfully.'
     };
 
@@ -308,6 +402,14 @@ async function resetPasswordWithToken(token, newPassword) {
     const user = validation.user;
     const tokenId = validation.tokenId;
 
+    const passwordPolicy = evaluatePasswordStrength(newPassword, user);
+    if (!passwordPolicy.ok) {
+      return {
+        success: false,
+        message: `Password policy violation: ${passwordPolicy.errors.join(' ')}`,
+      };
+    }
+
     // Hash new password
     const hashedPassword = await hashPassword(newPassword, 12);
 
@@ -402,5 +504,6 @@ module.exports = {
   validatePasswordResetToken,
   resetPasswordWithToken,
   cleanupExpiredTokens,
-  hasExceededResetLimit
+  hasExceededResetLimit,
+  evaluatePasswordStrength
 };

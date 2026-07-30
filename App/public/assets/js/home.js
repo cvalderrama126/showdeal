@@ -230,7 +230,7 @@
 
   function modulePermission(moduleName) {
     // Frontend-only module for buyers; backend authorization still applies per endpoint.
-    if (moduleName === "r_buyer_offer") {
+    if (moduleName === "r_buyer_offer" || moduleName === "r_buyer_won") {
       return { read: true, create: false, update: false, delete: false };
     }
     if (moduleName === "r_asset" && window.SD_USER?.isBuyer === true) {
@@ -504,7 +504,7 @@
     const isAdmin = window.SD_USER?.isAdmin === true;
     const isAuctioneer = window.SD_USER?.isAuctioneer === true;
     const isBuyer = window.SD_USER?.isBuyer === true;
-    const buyerAllowedModules = new Set(["r_buyer_offer"]);
+    const buyerAllowedModules = new Set(["r_buyer_offer", "r_buyer_won"]);
     const auctioneerBlockedModules = new Set(["r_module", "r_role", "r_access"]);
 
     getMenuItems().forEach((item) => {
@@ -516,7 +516,7 @@
       const buyerBlocked = window.SD_USER?.isBuyer === true && moduleName === "r_asset";
       const buyerRoleAllowed = !isBuyer || buyerAllowedModules.has(moduleName);
       const auctioneerBlocked = isAuctioneer && auctioneerBlockedModules.has(moduleName);
-      const roleAllowed = (!onlyAdmin || isAdmin || isAuctioneer) && (!onlyBuyer || !isAdmin) && !buyerBlocked && buyerRoleAllowed && !auctioneerBlocked;
+      const roleAllowed = (!onlyAdmin || isAdmin || isAuctioneer) && (!onlyBuyer || isBuyer) && !buyerBlocked && buyerRoleAllowed && !auctioneerBlocked;
       const visible = roleAllowed && canRead;
 
       item.hidden = visible === false;

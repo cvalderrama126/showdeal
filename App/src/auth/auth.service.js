@@ -152,9 +152,10 @@ function otpInfo(additional) {
   const rawSecret = typeof otp?.secret === "string" ? otp.secret : null;
   const secret = rawSecret ? decryptOtpSecret(rawSecret) : null;
   const enabled = otp?.enabled === true;  // SOLO si está explícitamente habilitado
+  const required = otp?.required === true;
   const issuer = typeof otp?.issuer === "string" ? otp.issuer : "ShowDeal";
   const label = typeof otp?.label === "string" ? otp.label : null;
-  return { enabled, secret, issuer, label };
+  return { enabled, required, secret, issuer, label };
 }
 
 function getLoginSecurityInfo(additional) {
@@ -253,6 +254,7 @@ function buildUserPayload(row) {
   return {
     id_user: user.id_user,
     user: user.login,
+    email: typeof user?.additional?.email === 'string' ? user.additional.email : null,
     name: user.name,
     id_company: user.id_company,
     id_role: user.id_role,
@@ -472,6 +474,7 @@ async function login({ user, password }) {
   // If OTP is enabled, always require OTP challenge.
   const otp = otpInfo(dbUser.additional);
   const firstLogin = dbUser.additional?.first_login === true;
+  const otpSetupRequired = otp.required === true && otp.enabled !== true;
 
   if (otp.enabled) {
     const challengeToken = signChallenge({
@@ -492,9 +495,9 @@ async function login({ user, password }) {
     };
   }
 
-  // On first login, generate OTP secret but don't require it yet
+  // Prepare OTP setup material when user must configure OTP or first-login onboarding needs it.
   let otpSetupData = null;
-  if (firstLogin && !otp.secret) {
+  if ((firstLogin || otpSetupRequired) && !otp.secret) {
     const secret = authenticator.generateSecret();
     const label = `ShowDeal:${dbUser.login}`;
     const otpauthUrl = authenticator.keyuri(dbUser.login, "ShowDeal", secret);
@@ -503,6 +506,7 @@ async function login({ user, password }) {
       otp: {
         type: "totp",
         enabled: false,
+        required: otpSetupRequired || firstLogin,
         secret: encryptOtpSecret(secret),
         issuer: "ShowDeal",
         label,
@@ -536,6 +540,7 @@ async function login({ user, password }) {
     data: {
       requireOtp: false,
       firstLogin,
+      otpSetupRequired,
       otpSetup: otpSetupData,
       token,
       user: buildUserPayload(dbUser),
@@ -654,6 +659,7 @@ async function otpEnable({ id_user, otp }) {
     otp: {
       ...((u.additional && typeof u.additional === "object" && u.additional.otp) || {}),
       enabled: true,
+      required: true,
     },
   });
 
@@ -673,6 +679,7 @@ async function otpDisable({ id_user }) {
     otp: {
       ...((u.additional && typeof u.additional === "object" && u.additional.otp) || {}),
       enabled: false,
+      required: false,
       secret: null,
     },
   });
@@ -685,6 +692,29 @@ async function otpDisable({ id_user }) {
   });
 
   return { ok: true, status: 200, data: { enabled: false } };
+}
+
+async function otpRequire({ id_user }) {
+  const u = await findUserById(id_user);
+  if (!u || u.is_active !== true) return { ok: false, status: 401, error: "Unauthorized" };
+
+  const nextAdditional = mergeAdditional(u.additional, {
+    otp: {
+      ...((u.additional && typeof u.additional === "object" && u.additional.otp) || {}),
+      type: "totp",
+      required: true,
+      enabled: false,
+    },
+  });
+
+  const revokedAdditional = bumpTokenVersion(nextAdditional);
+
+  await prisma.r_user.update({
+    where: { id_user: u.id_user },
+    data: { additional: revokedAdditional },
+  });
+
+  return { ok: true, status: 200, data: { required: true, enabled: false } };
 }
 
 async function persistPasswordChange({ user, newPassword }) {
@@ -750,4 +780,4 @@ async function changePasswordForced({ id_user, newPassword }) {
   return { ok: true, status: 200, data: { passwordChanged: true } };
 }
 
-module.exports = { login, verifyOtp, otpSetup, otpEnable, otpDisable, changePassword, changePasswordForced, verifyPassword, verifyPasswordWithMigration };
+module.exports = { login, verifyOtp, otpSetup, otpEnable, otpDisable, otpRequire, changePassword, changePasswordForced, verifyPassword, verifyPasswordWithMigration };

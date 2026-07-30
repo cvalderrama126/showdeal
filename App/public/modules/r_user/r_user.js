@@ -1,5 +1,5 @@
 async function init_r_user() {
-  const TABLE_COLUMNS = ["id_user", "user", "name", "company_name", "role_name", "is_active", "otp_enabled", "password_expires"];
+  const TABLE_COLUMNS = ["id_user", "user", "email", "name", "company_name", "role_name", "is_active", "otp_enabled", "password_expires"];
   const PAGE_SIZE = 10;
   const permissions = window.SD_PERMISSIONS?.r_user || {
     read: true,
@@ -129,6 +129,13 @@ async function init_r_user() {
         return row.role_name || getRoleLabel(row.id_role);
       case "is_active":
       case "otp_enabled":
+        if (key === "otp_enabled") {
+          const enabled = row.otp_enabled === true;
+          const required = row.otp_required === true;
+          if (enabled) return "Si";
+          if (required) return "Requerido (pendiente)";
+          return "No";
+        }
         return row[key] === true ? "Si" : "No";
       case "password_expires":
         return row.password_meta?.expired || "";
@@ -165,7 +172,11 @@ async function init_r_user() {
       </div>
       <div class="col-12 col-md-6">
         <label class="form-label">Usuario</label>
-        <input class="form-control" name="user" value="${escapeHtml(values.user ?? values.user_1 ?? "")}" required />
+        <input class="form-control" name="user" placeholder="usuario_unico" value="${escapeHtml(values.user ?? values.user_1 ?? "")}" required />
+      </div>
+      <div class="col-12 col-md-6">
+        <label class="form-label">Correo electrónico de notificación</label>
+        <input class="form-control" type="email" name="email" placeholder="usuario@empresa.com" value="${escapeHtml(values.email ?? values.additional?.email ?? "")}" required />
       </div>
       <div class="col-12">
         <label class="form-label">Nombre</label>
@@ -206,6 +217,7 @@ async function init_r_user() {
       id_role: form.querySelector('[name="id_role"]').value,
       uin: form.querySelector('[name="uin"]').value.trim(),
       user: form.querySelector('[name="user"]').value.trim(),
+      email: form.querySelector('[name="email"]').value.trim(),
       name: form.querySelector('[name="name"]').value.trim(),
       is_active: form.querySelector('[name="is_active"]').checked,
       password: form.querySelector('[name="password"]').value,
@@ -396,59 +408,35 @@ async function init_r_user() {
   async function openOtp(row) {
     state.otpUser = row || null;
     clearAlert("otpModalAlert");
-    document.getElementById("otpCode").value = "";
-    document.getElementById("otpSecret").value = "";
-    document.getElementById("otpAuthUrl").value = "";
-    const qrImage = document.getElementById("otpQrImage");
-    const qrHint = document.getElementById("otpQrHint");
-    if (qrImage) {
-      qrImage.removeAttribute("src");
-      qrImage.style.display = "none";
-    }
-    if (qrHint) {
-      qrHint.textContent = "Escanea este QR con Google Authenticator/Authy.";
-    }
-    document.getElementById("otpModalTitle").textContent = row?.otp_enabled ? "Administrar OTP" : "Habilitar OTP";
-    document.getElementById("otpModalUserInfo").innerHTML = `Usuario: <b>${escapeHtml(row?.user || "")}</b> (ID ${escapeHtml(row?.id_user || "")})`;
+    const required = row?.otp_required === true;
+    const enabled = row?.otp_enabled === true;
+
+    document.getElementById("otpModalTitle").textContent = "Política OTP del usuario";
+    document.getElementById("otpModalUserInfo").innerHTML = `Usuario: <b>${escapeHtml(row?.user || "")}</b> (ID ${escapeHtml(row?.id_user || "")}) · Requerido: <b>${required ? "Si" : "No"}</b> · Configurado: <b>${enabled ? "Si" : "No"}</b>`;
+
+    const otpCodeGroup = document.getElementById("otpCode")?.parentElement;
+    const otpSecretGroup = document.getElementById("otpSecret")?.parentElement;
+    const otpAuthUrlGroup = document.getElementById("otpAuthUrl")?.parentElement;
+    const otpQrGroup = document.getElementById("otpQrGroup");
+    if (otpCodeGroup) otpCodeGroup.style.display = "none";
+    if (otpSecretGroup) otpSecretGroup.style.display = "none";
+    if (otpAuthUrlGroup) otpAuthUrlGroup.style.display = "none";
+    if (otpQrGroup) otpQrGroup.style.display = "none";
     
     // Show/hide disable button
     const btnDisable = document.getElementById("btnDisableOtp");
-    if (row?.otp_enabled) {
+    if (required || enabled) {
       btnDisable.style.display = "inline-block";
-      document.getElementById("otpCode").style.display = "none";
-      document.getElementById("otpAuthUrl").parentElement.style.display = "none";
-      document.getElementById("otpSecret").parentElement.style.display = "none";
-      document.getElementById("otpQrGroup").style.display = "none";
-      document.getElementById("btnEnableOtp").textContent = "OTP ya habilitado";
+      document.getElementById("btnEnableOtp").textContent = "OTP ya requerido";
       document.getElementById("btnEnableOtp").disabled = true;
-      showAlert("otpModalAlert", "success", "OTP está habilitado para este usuario.");
+      showAlert("otpModalAlert", "success", enabled
+        ? "OTP está requerido y ya configurado por el usuario."
+        : "OTP está requerido. El usuario debe configurarlo en su próxima sesión.");
     } else {
       btnDisable.style.display = "none";
-      document.getElementById("otpCode").style.display = "block";
-      document.getElementById("otpAuthUrl").parentElement.style.display = "block";
-      document.getElementById("otpSecret").parentElement.style.display = "block";
-      document.getElementById("otpQrGroup").style.display = "block";
-      document.getElementById("btnEnableOtp").textContent = "Habilitar OTP";
+      document.getElementById("btnEnableOtp").textContent = "Marcar OTP requerido";
       document.getElementById("btnEnableOtp").disabled = false;
-    }
-
-    if (!row?.otp_enabled) {
-      try {
-        const setup = await api(`/auth/otp/setup/${row.id_user}`, { method: "POST" });
-        document.getElementById("otpSecret").value = setup?.secret || "";
-        document.getElementById("otpAuthUrl").value = setup?.otpauth_url || "";
-        if (qrImage) {
-          qrImage.src = `/auth/otp/qrcode?id_user=${encodeURIComponent(String(row.id_user))}&t=${Date.now()}`;
-          qrImage.style.display = "block";
-          qrImage.onerror = () => {
-            qrImage.style.display = "none";
-            if (qrHint) qrHint.textContent = "No se pudo cargar el QR. Usa el Secret OTP o la OTP Auth URL manualmente.";
-          };
-        }
-        showAlert("otpModalAlert", "info", "OTP configurado. Ingresa el código generado para habilitarlo.");
-      } catch (err) {
-        showAlert("usersAlert", "danger", err?.error || err?.message || "No se pudo iniciar la configuración OTP");
-      }
+      showAlert("otpModalAlert", "info", "Al marcar OTP requerido, el usuario lo configurará personalmente al iniciar sesión.");
     }
     
     otpModal.show();
@@ -456,7 +444,6 @@ async function init_r_user() {
 
   async function enableOtp() {
     clearAlert("otpModalAlert");
-    const otp = String(document.getElementById("otpCode").value || "").trim();
     const idUser = state.otpUser?.id_user;
 
     if (!idUser) {
@@ -464,18 +451,13 @@ async function init_r_user() {
       return;
     }
 
-    if (!/^\d{6}$/.test(otp)) {
-      showAlert("otpModalAlert", "warning", "Debes ingresar un código OTP válido de 6 dígitos.");
-      return;
-    }
-
     try {
-      await api(`/auth/otp/enable/${idUser}`, { method: "POST", body: { otp } });
+      await api(`/auth/otp/require/${idUser}`, { method: "POST" });
       otpModal.hide();
       await loadUsers();
-      showAlert("usersAlert", "success", "OTP habilitado correctamente para el usuario.");
+      showAlert("usersAlert", "success", "OTP quedó requerido para el usuario. Él lo configurará en su próxima sesión.");
     } catch (err) {
-      showAlert("otpModalAlert", "danger", err?.error || err?.message || "No se pudo habilitar OTP");
+      showAlert("otpModalAlert", "danger", err?.error || err?.message || "No se pudo marcar OTP como requerido");
     }
   }
 
@@ -486,7 +468,7 @@ async function init_r_user() {
       return;
     }
 
-    if (!confirm("¿Estás seguro de que deseas deshabilitar OTP para este usuario? Necesitará volver a configurarlo para iniciar sesión.")) {
+    if (!confirm("¿Estás seguro de que deseas deshabilitar el requerimiento OTP para este usuario?")) {
       return;
     }
 

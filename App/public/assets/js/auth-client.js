@@ -125,7 +125,9 @@
 
       if (!response.data || response.data.ok !== true) {
         if (response.data?.code === "PASSWORD_EXPIRED") {
-          showError("Tu contrasena vencio. Debes actualizarla antes de continuar.");
+          const registeredEmail = String(response.data?.user?.email || "").trim();
+          const qpEmail = encodeURIComponent(registeredEmail);
+          window.location.href = `/reset-password.html?expired=1&email=${qpEmail}`;
           return;
         }
 
@@ -152,7 +154,9 @@
       if (response.data.requireOtp === false) {
         saveSession(response.data);
         clearChallenge();
-        window.location.href = "/home.html?first_login=" + (response.data.firstLogin === true ? "1" : "0");
+        const firstLoginFlag = response.data.firstLogin === true ? "1" : "0";
+        const otpSetupFlag = response.data.otpSetupRequired === true ? "1" : "0";
+        window.location.href = `/home.html?first_login=${firstLoginFlag}&otp_setup=${otpSetupFlag}`;
         return;
       }
 
@@ -196,7 +200,9 @@
 
       saveSession(response.data);
       clearChallenge();
-      window.location.href = "/home.html?first_login=" + (response.data.firstLogin === true ? "1" : "0");
+      const firstLoginFlag = response.data.firstLogin === true ? "1" : "0";
+      const otpSetupFlag = response.data.otpSetupRequired === true ? "1" : "0";
+      window.location.href = `/home.html?first_login=${firstLoginFlag}&otp_setup=${otpSetupFlag}`;
     } catch {
       showError("No se pudo validar el OTP.");
     } finally {
@@ -210,15 +216,28 @@
     form.classList.add("was-validated");
     if (!form.checkValidity()) return;
 
-    const email = (qs("resetRequestEmail")?.value || "").trim().toLowerCase();
+    const email = (qs("resetRequestEmail")?.value || "").trim();
     const btn = form.querySelector('button[type="submit"]');
     if (btn) btn.disabled = true;
 
     try {
       const response = await postJson("/auth/password-reset/request", { email });
       if (!response.ok) {
-        showError(response.data?.error || "No se pudo procesar la solicitud de recuperación.");
+        showError(response.data?.message || response.data?.error || "No se pudo procesar la solicitud de recuperación.");
         return;
+      }
+
+      if (response.data?.devResetUrl) {
+        try {
+          const url = new URL(response.data.devResetUrl);
+          const token = url.searchParams.get("token");
+          const resetTokenInput = qs("resetToken");
+          if (token && resetTokenInput && !resetTokenInput.value) {
+            resetTokenInput.value = token;
+          }
+        } catch {
+          // Ignore invalid dev URL parsing.
+        }
       }
 
       showInfo(response.data?.message || "Si el correo existe, se enviaron instrucciones de recuperación.");
@@ -252,6 +271,10 @@
     try {
       const response = await postJson("/auth/password-reset/reset", { token, password });
       if (!response.ok) {
+        if (response.data?.error === "PASSWORD_POLICY_VIOLATION" && Array.isArray(response.data?.details)) {
+          showError(response.data.details.join("\n"));
+          return;
+        }
         showError(response.data?.error || "No se pudo restablecer la contraseña.");
         return;
       }
@@ -298,6 +321,19 @@
     if (resetTokenInput && !resetTokenInput.value) {
       const tokenFromUrl = getQueryParam("token");
       if (tokenFromUrl) resetTokenInput.value = tokenFromUrl;
+    }
+
+    const resetEmailInput = qs("resetRequestEmail");
+    if (resetEmailInput) {
+      const emailFromUrl = getQueryParam("email");
+      if (emailFromUrl && !resetEmailInput.value) {
+        resetEmailInput.value = emailFromUrl;
+      }
+
+      const expiredFlag = getQueryParam("expired");
+      if (expiredFlag === "1") {
+        showInfo("Tu contrasena vencio. Solicita el enlace y actualizala para continuar.");
+      }
     }
 
     const challenge = getChallenge();

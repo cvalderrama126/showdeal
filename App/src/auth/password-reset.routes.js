@@ -5,7 +5,8 @@ const { passwordResetRateLimit } = require('./password-reset.middleware');
 const {
   createPasswordResetToken,
   validatePasswordResetToken,
-  resetPasswordWithToken
+  resetPasswordWithToken,
+  evaluatePasswordStrength
 } = require('./password-reset.service');
 const { isEmailConfigured, sendPasswordResetEmail } = require('./password-reset-email.service');
 
@@ -23,16 +24,12 @@ const resetTokenActionLimiter = rateLimit({
 
 // Validation schemas
 const requestResetSchema = z.object({
-  email: z.string().email('Invalid email format')
+  email: z.string().trim().min(1, 'Email or username is required')
 });
 
 const resetPasswordSchema = z.object({
   token: z.string().min(1, 'Token is required'),
-  password: z.string()
-    .min(8, 'Password must be at least 8 characters long')
-    .max(128, 'Password must be at most 128 characters long')
-    .regex(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-      'Password must contain at least one lowercase letter, one uppercase letter, and one number')
+  password: z.string().min(1, 'Password is required')
 });
 
 const validateTokenSchema = z.object({
@@ -57,21 +54,57 @@ router.post('/request', passwordResetRateLimit, async (req, res) => {
     const { email } = validation.data;
     const clientIP = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('User-Agent');
+    const appBaseUrl = process.env.APP_BASE_URL || 'http://localhost:3001';
 
     // Create reset token
     const result = await createPasswordResetToken(email, clientIP, userAgent);
 
     if (result.success) {
-      // Never expose reset tokens in API responses.
-      if (process.env.NODE_ENV === 'production' && !isEmailConfigured()) {
+      // In development, allow reset flow without SMTP by returning a local reset link.
+      if (!isEmailConfigured()) {
+        if (process.env.NODE_ENV !== 'production') {
+          if (result.token) {
+            const resetUrl = `${appBaseUrl.replace(/\/$/, '')}/reset-password.html?token=${encodeURIComponent(result.token)}`;
+            return res.json({
+              message: 'SMTP is not configured. Use the development reset link to continue.',
+              devResetUrl: resetUrl,
+            });
+          }
+
+          return res.json({
+            message: 'SMTP is not configured and no reset link could be generated for this identity. Try with your username or verify your registered recovery email.',
+          });
+        }
+
         return res.status(503).json({
-          error: 'PASSWORD_RESET_UNAVAILABLE',
-          message: 'Password reset is temporarily unavailable.'
+          error: 'PASSWORD_RESET_EMAIL_NOT_CONFIGURED',
+          message: 'Password reset email service is not configured.'
         });
       }
 
-      if (result.token && isEmailConfigured()) {
-        await sendPasswordResetEmail({ toEmail: email, token: result.token });
+      if (!result.deliveryEmail) {
+        if (process.env.NODE_ENV !== 'production' && process.env.SMTP_USE_STREAM === 'true' && result.token) {
+          const resetUrl = `${appBaseUrl.replace(/\/$/, '')}/reset-password.html?token=${encodeURIComponent(result.token)}`;
+          return res.json({
+            message: 'Generic local mail mode is active. Use this reset link to continue.',
+            devResetUrl: resetUrl,
+          });
+        }
+
+        return res.status(400).json({
+          error: 'USER_EMAIL_NOT_CONFIGURED',
+          message: 'The user does not have a registered recovery email.',
+        });
+      }
+
+      if (result.token) {
+        const mailResult = await sendPasswordResetEmail({ toEmail: result.deliveryEmail, token: result.token });
+        if (!mailResult?.sent) {
+          return res.status(502).json({
+            error: 'PASSWORD_RESET_EMAIL_SEND_FAILED',
+            message: mailResult?.message || 'Unable to send password reset email.'
+          });
+        }
       }
 
       res.json({
@@ -147,6 +180,14 @@ router.post('/reset', resetTokenActionLimiter, async (req, res) => {
     }
 
     const { token, password } = validation.data;
+
+    const policyResult = evaluatePasswordStrength(password);
+    if (!policyResult.ok) {
+      return res.status(400).json({
+        error: 'PASSWORD_POLICY_VIOLATION',
+        details: policyResult.errors,
+      });
+    }
 
     // Reset password
     const result = await resetPasswordWithToken(token, password);
