@@ -15,6 +15,12 @@ build/
 .env.local
 .env.*.local
 
+# Paquete on-premise y exportaciones Docker: se generan para la entrega, no para Git.
+deploy/
+showdeal-api-local.tar
+postgres-15-alpine.tar
+redis-7-alpine.tar
+
 # Editor / OS
 .DS_Store
 .idea/

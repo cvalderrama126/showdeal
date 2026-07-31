@@ -9,7 +9,42 @@ BigInt.prototype.toJSON = function () {
   return this.toString();
 };
 
+function validateProductionEnvironment() {
+  if (process.env.NODE_ENV !== "production") return;
+
+  const required = [
+    "DATABASE_URL",
+    "REDIS_URL",
+    "JWT_SECRET",
+    "JWT_CHALLENGE_SECRET",
+    "ALLOWED_ORIGINS",
+    "APP_BASE_URL",
+  ];
+  const missing = required.filter((name) => !String(process.env[name] || "").trim());
+  if (missing.length) {
+    throw new Error(`Missing required production environment variables: ${missing.join(", ")}`);
+  }
+
+  const weakSecrets = ["JWT_SECRET", "JWT_CHALLENGE_SECRET"].filter(
+    (name) => String(process.env[name]).trim().length < 32
+  );
+  if (weakSecrets.length) {
+    throw new Error(`Production secrets must contain at least 32 characters: ${weakSecrets.join(", ")}`);
+  }
+
+  let appBaseUrl;
+  try {
+    appBaseUrl = new URL(process.env.APP_BASE_URL);
+  } catch (_error) {
+    throw new Error("APP_BASE_URL must be an absolute URL.");
+  }
+  if (appBaseUrl.protocol !== "https:") {
+    console.warn("[showdeal-api] APP_BASE_URL is not HTTPS. Use HTTPS in production before enabling external access.");
+  }
+}
+
 async function main() {
+  validateProductionEnvironment();
   // Ensure module catalog exists so r_access can grant permissions by role/module.
   try {
     await ensureCoreModules();

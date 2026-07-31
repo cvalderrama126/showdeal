@@ -177,19 +177,9 @@ async function init_r_auction_resolution() {
       });
     }
 
-    apexLoadPromise = new Promise(async (resolve, reject) => {
-      try {
-        await loadScript("apexcharts-local", "/assets/vendor/apexcharts.min.js");
-        resolve();
-      } catch (_localErr) {
-        try {
-          await loadScript("apexcharts-cdn", "https://cdn.jsdelivr.net/npm/apexcharts");
-          resolve();
-        } catch (cdnErr) {
-          reject(cdnErr);
-        }
-      }
-    });
+    // Isolated deployments must not depend on a public CDN. If the local asset
+    // is unavailable, the caller uses the existing native chart fallback.
+    apexLoadPromise = loadScript("apexcharts-local", "/assets/vendor/apexcharts.min.js");
 
     return apexLoadPromise;
   }

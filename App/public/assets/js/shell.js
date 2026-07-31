@@ -48,9 +48,12 @@ function paintUser() {
     // Remove query param from URL
     window.history.replaceState({}, document.title, window.location.pathname);
 
-    // Get OTP setup data from session, or regenerate from backend if missing.
+    // Get OTP setup data only when setup is actually pending. After a normal
+    // OTP login verification, first_login may still be true, but OTP is already
+    // enabled and the user should continue with password onboarding only.
     let otpSetup = getFirstLoginOtpSetup();
-    if (!otpSetup?.secret || !otpSetup?.otpauth_url) {
+    const needsOtpSetup = otpSetupRequired || !!otpSetup?.secret;
+    if (needsOtpSetup && (!otpSetup?.secret || !otpSetup?.otpauth_url)) {
       otpSetup = await fetchFirstLoginOtpSetup().catch(() => null);
       if (otpSetup?.secret && otpSetup?.otpauth_url) {
         setFirstLoginOtpSetup(otpSetup);
@@ -65,8 +68,8 @@ function paintUser() {
       });
       modal.show();
 
-      // If OTP setup data available, show OTP section first
-      if (otpSetup?.secret && otpSetup?.otpauth_url) {
+      // If OTP setup data available, show OTP section first.
+      if (needsOtpSetup && otpSetup?.secret && otpSetup?.otpauth_url) {
         showOtpSetupSection(otpSetup);
       } else {
         if (window.firstLoginContext?.requirePasswordChange) {
@@ -86,6 +89,7 @@ function paintUser() {
 
       const otpForm = document.getElementById("otpValidationForm");
       if (otpForm) {
+        bindOtpNormalizer(otpForm.querySelector("#otpCode"));
         otpForm.addEventListener("submit", handleOtpValidation);
       }
 
@@ -117,10 +121,29 @@ function paintUser() {
     };
   }
 
+  function normalizeOtpCode(value) {
+    return String(value || "").replace(/\D/g, "").slice(0, 6);
+  }
+
+  function bindOtpNormalizer(input) {
+    if (!input) return;
+    input.addEventListener("input", () => {
+      const normalized = normalizeOtpCode(input.value);
+      if (input.value !== normalized) input.value = normalized;
+    });
+    input.addEventListener("paste", () => {
+      window.setTimeout(() => {
+        input.value = normalizeOtpCode(input.value);
+      }, 0);
+    });
+  }
+
   async function handleOtpValidation(ev) {
     ev.preventDefault();
 
-    const code = document.getElementById("otpCode")?.value || "";
+    const codeInput = ev.currentTarget.querySelector("#otpCode");
+    const code = normalizeOtpCode(codeInput?.value);
+    if (codeInput) codeInput.value = code;
     
     if (!/^\d{6}$/.test(code)) {
       alert("Ingresa un código de 6 dígitos.");

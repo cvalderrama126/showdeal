@@ -414,7 +414,7 @@ async function init_r_user() {
     document.getElementById("otpModalTitle").textContent = "Política OTP del usuario";
     document.getElementById("otpModalUserInfo").innerHTML = `Usuario: <b>${escapeHtml(row?.user || "")}</b> (ID ${escapeHtml(row?.id_user || "")}) · Requerido: <b>${required ? "Si" : "No"}</b> · Configurado: <b>${enabled ? "Si" : "No"}</b>`;
 
-    const otpCodeGroup = document.getElementById("otpCode")?.parentElement;
+    const otpCodeGroup = document.getElementById("userOtpCode")?.parentElement;
     const otpSecretGroup = document.getElementById("otpSecret")?.parentElement;
     const otpAuthUrlGroup = document.getElementById("otpAuthUrl")?.parentElement;
     const otpQrGroup = document.getElementById("otpQrGroup");

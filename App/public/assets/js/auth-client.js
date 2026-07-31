@@ -72,6 +72,23 @@
     return params.get(name);
   }
 
+  function normalizeOtpCode(value) {
+    return String(value || "").replace(/\D/g, "").slice(0, 6);
+  }
+
+  function bindOtpNormalizer(input) {
+    if (!input) return;
+    input.addEventListener("input", () => {
+      const normalized = normalizeOtpCode(input.value);
+      if (input.value !== normalized) input.value = normalized;
+    });
+    input.addEventListener("paste", () => {
+      window.setTimeout(() => {
+        input.value = normalizeOtpCode(input.value);
+      }, 0);
+    });
+  }
+
   function redirectIfAuthenticated() {
     const session = getSession();
     if (!session?.user) return;
@@ -182,7 +199,9 @@
       return;
     }
 
-    const otp = (qs("otp")?.value || "").trim();
+    const otpInput = qs("otp");
+    const otp = normalizeOtpCode(otpInput?.value);
+    if (otpInput) otpInput.value = otp;
     const btn = form.querySelector('button[type="submit"]');
 
     if (btn) btn.disabled = true;
@@ -310,6 +329,7 @@
 
     const otpForm = qs("otpForm");
     if (otpForm) otpForm.addEventListener("submit", handleOtpSubmit);
+    bindOtpNormalizer(qs("otp"));
 
     const requestResetForm = qs("passwordResetRequestForm");
     if (requestResetForm) requestResetForm.addEventListener("submit", handlePasswordResetRequestSubmit);

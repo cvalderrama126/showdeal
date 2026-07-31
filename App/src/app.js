@@ -15,6 +15,31 @@ const { errorHandler, notFoundHandler } = require("./routes/error.middleware");
 const { openApiSpec } = require("./docs/openapi");
 const { requireAuth } = require("./auth/auth.middleware");
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function isLocalDevIp(ip) {
+  return [
+    "::1",
+    "127.0.0.1",
+    "::ffff:127.0.0.1",
+    "172.18.0.1",
+  ].includes(String(ip || ""));
+}
+
+function isEnabled(value) {
+  return ["1", "true", "yes", "on"].includes(String(value || "").trim().toLowerCase());
+}
+
+function parseAllowedOrigins(value) {
+  return String(value || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
 function createApp() {
   const app = express();
 
@@ -27,9 +52,12 @@ function createApp() {
 
   app.use(
     helmet({
+      hsts: isEnabled(process.env.ENABLE_HSTS),
       contentSecurityPolicy: {
+        useDefaults: false,
         directives: {
           ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+          "upgrade-insecure-requests": null,
           "img-src": ["'self'", "data:", "blob:"],
           "frame-src": ["'self'", "blob:"],
           // Strict script policy: no 'unsafe-inline'. The Swagger UI route
@@ -40,9 +68,10 @@ function createApp() {
   );
   
   // ✅ RATE LIMITING GLOBAL (Security: prevent DoS)
+  const isProdEnv = process.env.NODE_ENV === "production";
   const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
+    windowMs: parsePositiveInt(process.env.GLOBAL_RATE_LIMIT_WINDOW_MS, 15 * 60 * 1000),
+    max: parsePositiveInt(process.env.GLOBAL_RATE_LIMIT_MAX, isProdEnv ? 300 : 5000),
     message: {
       ok: false,
       error: "Too many requests from this IP, please try again later."
@@ -51,19 +80,20 @@ function createApp() {
     legacyHeaders: false,
     skip: (req) =>
       process.env.NODE_ENV === "test" ||
-      (process.env.NODE_ENV !== "production" && (req.ip === "::1" || req.ip === "127.0.0.1" || req.ip === "::ffff:127.0.0.1")),
+      (!isProdEnv && isLocalDevIp(req.ip)),
   });
   app.use(limiter);
   
   // ✅ CORS WHITELIST (Security: prevent CSRF) - REMOVED null origin
-  const allowedOrigins = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:3001",
-  ];
-  if (process.env.NODE_ENV === "production") {
-    allowedOrigins.push("https://showdeal.com", "https://www.showdeal.com");
+  // CORS is environment-owned. Production origins must never be baked into code.
+  const allowedOrigins = parseAllowedOrigins(process.env.ALLOWED_ORIGINS);
+  if (process.env.NODE_ENV !== "production" && allowedOrigins.length === 0) {
+    allowedOrigins.push(
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://127.0.0.1:3000",
+      "http://127.0.0.1:3001"
+    );
   }
   
   app.use(cors({

@@ -497,6 +497,7 @@ async function login({ user, password }) {
 
   // Prepare OTP setup material when user must configure OTP or first-login onboarding needs it.
   let otpSetupData = null;
+  const effectiveOtpSetupRequired = otpSetupRequired || firstLogin;
   if ((firstLogin || otpSetupRequired) && !otp.secret) {
     const secret = authenticator.generateSecret();
     const label = `ShowDeal:${dbUser.login}`;
@@ -520,6 +521,19 @@ async function login({ user, password }) {
     });
 
     otpSetupData = { secret, otpauth_url: otpauthUrl, issuer: "ShowDeal", label };
+  } else if (effectiveOtpSetupRequired && otp.secret) {
+    const label = otp.label || `ShowDeal:${dbUser.login}`;
+    const otpauthUrl =
+      typeof dbUser.additional?.otp?.otpauth_url === "string"
+        ? dbUser.additional.otp.otpauth_url
+        : authenticator.keyuri(dbUser.login, otp.issuer || "ShowDeal", otp.secret);
+
+    otpSetupData = {
+      secret: otp.secret,
+      otpauth_url: otpauthUrl,
+      issuer: otp.issuer || "ShowDeal",
+      label,
+    };
   }
 
   // Si OTP NO está habilitado -> emite JWT directo
@@ -540,7 +554,7 @@ async function login({ user, password }) {
     data: {
       requireOtp: false,
       firstLogin,
-      otpSetupRequired,
+      otpSetupRequired: effectiveOtpSetupRequired,
       otpSetup: otpSetupData,
       token,
       user: buildUserPayload(dbUser),

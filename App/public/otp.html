@@ -54,7 +54,7 @@
       <form id="otpForm" class="mt-3" novalidate>
         <div class="mb-3">
           <label class="form-label">Código OTP (6 dígitos)</label>
-          <input class="form-control form-control-lg" inputmode="numeric" pattern="\d{6}" maxlength="6" id="otp" placeholder="123456" required>
+          <input class="form-control form-control-lg" inputmode="numeric" pattern="\d{6}" maxlength="12" id="otp" placeholder="123456" autocomplete="one-time-code" required>
           <div class="invalid-feedback">Ingresa un código de 6 dígitos.</div>
         </div>
         <div class="d-grid gap-2">

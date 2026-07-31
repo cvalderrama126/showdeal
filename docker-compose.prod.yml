@@ -2,19 +2,19 @@ version: '3.8'
 
 services:
   showdeal-api:
-    image: showdeal:latest
+    image: showdeal-api:local
     container_name: showdeal-api-prod
     restart: always
     ports:
-      - "3001:3001"
+      - "3000:3000"
     environment:
       NODE_ENV: production
-      PORT: 3001
+      PORT: 3000
       DATABASE_URL: ${DATABASE_URL}
       JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRE: 86400
-      OTP_ISSUER: ShowDeal
-      OTP_WINDOW: 1
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      JWT_CHALLENGE_SECRET: ${JWT_CHALLENGE_SECRET}
+      JWT_CHALLENGE_EXPIRES_IN: ${JWT_CHALLENGE_EXPIRES_IN:-5m}
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
       SMTP_USER: ${SMTP_USER}
@@ -22,7 +22,10 @@ services:
       REDIS_URL: ${REDIS_URL}
       LOG_LEVEL: info
       ENABLE_DEBUG_ERRORS: '0'
-      CORS_ORIGIN: ${CORS_ORIGIN}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      APP_BASE_URL: ${APP_BASE_URL}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      ENABLE_HSTS: ${ENABLE_HSTS:-false}
     volumes:
       - showdeal-uploads:/app/uploads
       - showdeal-logs:/app/logs
@@ -50,7 +53,7 @@ services:
       - /app/logs
 
   postgres:
-    image: postgres:14-alpine
+    image: postgres:15-alpine
     container_name: showdeal-db-prod
     restart: always
     environment:
@@ -88,7 +91,7 @@ services:
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
