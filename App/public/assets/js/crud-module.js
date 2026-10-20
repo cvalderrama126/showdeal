@@ -529,11 +529,13 @@
       renderPagination();
     }
 
-    async function ensureOptionsLoaded() {
-      for (const field of config.fields) {
-        if (field.type !== "select" && field.type !== "select-multiple") continue;
-        if (state.fieldOptionLists.has(field.name)) continue;
-        state.fieldOptionLists.set(field.name, await loadOptions(field));
+    async function ensureOptionsLoaded({ includeFields = true } = {}) {
+      if (includeFields) {
+        for (const field of config.fields) {
+          if (field.type !== "select" && field.type !== "select-multiple") continue;
+          if (state.fieldOptionLists.has(field.name)) continue;
+          state.fieldOptionLists.set(field.name, await loadOptions(field));
+        }
       }
 
       for (const filter of filters) {
@@ -717,7 +719,7 @@
 
     renderShell();
     if (permissions.read !== true) return;
-    await ensureOptionsLoaded();
+    await ensureOptionsLoaded({ includeFields: permissions.create === true || permissions.update === true });
     renderShell();
     await loadRows({ resetPaging: true });
 

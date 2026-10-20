@@ -16,6 +16,27 @@
     statusBox.textContent = message;
   }
 
+  function markConfigured(message) {
+    setStatus(message || 'El sistema ya esta configurado. Redirigiendo al login...', 'success');
+    btnNext.classList.add('d-none');
+    btnPrev.disabled = true;
+    btnFinish.disabled = true;
+    form.classList.add('d-none');
+    setTimeout(() => {
+      window.location.href = '/index.html';
+    }, 1200);
+  }
+
+  async function confirmConfigured() {
+    try {
+      const res = await fetch('/setup-api/status', { cache: 'no-store' });
+      const data = await res.json().catch(() => ({}));
+      return res.ok && data && data.configured === true;
+    } catch (error) {
+      return false;
+    }
+  }
+
   function showStep(nextStep) {
     step = Math.max(1, Math.min(maxStep, nextStep));
     panes.forEach((pane) => {
@@ -91,14 +112,10 @@
 
   async function checkStatus() {
     try {
-      const res = await fetch('/setup-api/status');
+      const res = await fetch('/setup-api/status', { cache: 'no-store' });
       const data = await res.json();
       if (data && data.configured) {
-        setStatus('El sistema ya esta configurado. Redirigiendo al login...', 'success');
-        setTimeout(() => {
-          window.location.href = '/index.html';
-        }, 1200);
-        form.classList.add('d-none');
+        markConfigured();
         return;
       }
       setStatus('Sistema sin configurar. Completa el wizard para inicializar.', 'info');
@@ -137,19 +154,27 @@
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok || !data.ok) {
+        const alreadyConfigured = data.error === 'SYSTEM_ALREADY_CONFIGURED';
+        if (alreadyConfigured || await confirmConfigured()) {
+          markConfigured('Setup completado. Redirigiendo al login...');
+          return;
+        }
+
         const detail = data.details ? ` (${data.details})` : '';
         setStatus((data.error || 'No se pudo completar el setup.') + detail, 'danger');
         btnFinish.disabled = false;
         return;
       }
 
-      setStatus('Setup completado. La configuración sensible quedó persistida en el servidor. Reinicia la app para aplicar los cambios.', 'success');
-      btnNext.classList.add('d-none');
-      btnPrev.disabled = true;
-      btnFinish.disabled = true;
+      markConfigured('Setup completado. Redirigiendo al login...');
     } catch (error) {
+      if (await confirmConfigured()) {
+        markConfigured('Setup completado. Redirigiendo al login...');
+        return;
+      }
+
       setStatus('Error de red al completar setup.', 'danger');
       btnFinish.disabled = false;
     }

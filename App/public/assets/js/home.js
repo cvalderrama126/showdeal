@@ -449,10 +449,21 @@
       .replace(/'/g, "&#39;");
   }
 
+  function readableError(err) {
+    if (!err || typeof err !== "object") return String(err || "");
+    if (err.message) return err.message;
+    if (err.error) return err.details ? `${err.error} (${err.details})` : err.error;
+    try {
+      return JSON.stringify(err);
+    } catch (jsonError) {
+      return String(err);
+    }
+  }
+
   function renderPlaceholder(moduleName, err) {
     const host = document.getElementById("appContent");
     const safeModuleName = escapeHtml(moduleName);
-    const safeError = escapeHtml(String(err?.message || err));
+    const safeError = escapeHtml(readableError(err));
     host.innerHTML = `
       <div class="sd-card p-4">
         <h4 class="mb-1">${safeModuleName}</h4>
